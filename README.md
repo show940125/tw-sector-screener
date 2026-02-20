@@ -1,6 +1,6 @@
 # TW Sector Screener
 
-台股類股選股工具。  
+台股類股選股工具skill。  
 目標是從一整個主題（例如半導體、AI、記憶體）裡，找出相對值得優先研究的個股，並給出可執行的倉位建議。
 
 ## 功能
@@ -20,12 +20,12 @@
 ### 1. 直接執行
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
+python "C:\Users\...\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
   --theme 半導體 `
   --as-of 2026-02-20 `
   --top-n 10 `
   --universe-limit 60 `
-  --output-dir C:\Users\a0953041880\tw-reports
+  --output-dir C:\Users\...\tw-reports
 ```
 
 ### 2. 查看結果
@@ -39,7 +39,7 @@ sector-report-<theme>-<yyyymmdd>.md
 例如：
 
 ```text
-C:\Users\a0953041880\tw-reports\sector-report-半導體-20260220.md
+C:\Users\...\tw-reports\sector-report-半導體-20260220.md
 ```
 
 ## 參數說明
