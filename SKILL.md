@@ -26,7 +26,7 @@ description: Use when screening Taiwan sector/theme stocks and producing researc
 2. TPEx OpenAPI + afterTrading API
 
 目前進度：
-- `A / Data Quality Hardening`：已補季度快照刷新與 quality coverage summary
+- `A / Data Quality Hardening`：已建立 SQLite 季度資料層，並補季度刷新與 quality coverage summary
 - `B / Validation V2`：已升級 factor-aware validation
 - `C / D / E`：仍待後續優化
 
@@ -107,7 +107,7 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
 - 預設用 `strict` 題材池，避免 AI 題材被 telecom / panel 類 proxy 污染。
 - 缺值會直接反映在 `confidence_score` 與 `data_quality_flags`，不再默默補中性分。
 - `confidence_score` 現在拆成 `factor_coverage_confidence` 與 `data_freshness_confidence`。
-- `quality_score` 目前採官方最新季 + 本地快照回補前一期。
+- `quality_score` 目前採官方最新季抓取 + SQLite append-only 歷史累積。
 - `idea score` 是研究優先序；`action view` 才是部位動作。
 - repo 以 `Feature Branch + PR` 維護，分支名稱固定使用 `codex/` 前綴。
 - 官方執行輸出固定放在 `C:\Users\a0953041880\tw-sector-screener-output`，不進 git；repo 內只保留 `examples/sample-reports/` 樣本。

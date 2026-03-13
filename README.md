@@ -71,9 +71,9 @@
 
 ### A / Data Quality Hardening
 
-- 已加入季度快照刷新工具
-- 已加入 `quality_coverage_summary`
-- 報告與 audit 會直接揭露當期與前期品質資料覆蓋率
+- 已建立 SQLite 季度資料層，路徑固定在官方 output root 下的 `cache/market/quarterly_fundamentals.sqlite`
+- 已加入季度刷新工具與 `quality_coverage_summary`
+- 報告與 audit 會直接揭露當期與前期品質資料覆蓋率，以及所用的季度 store 路徑
 
 ### B / Validation V2
 
@@ -166,8 +166,8 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\refresh_qu
 - TPEx OpenAPI
 - TPEx `afterTrading` API
 
-季度品質資料目前採「官方最新季 + 本地快照回補前一期」模式。  
-最新季通常拿得到；前一期覆蓋會隨日常執行與快照累積漸漸變厚。這是現階段的真實限制，文件應當照實說明。
+季度品質資料目前採「官方最新季抓取 + SQLite append-only 歷史累積」模式。  
+最新季通常拿得到；前一期與更早期的覆蓋會隨日常刷新逐步變厚。這是現階段的真實限制，文件就該老實寫。
 
 ## How To Read The Report
 

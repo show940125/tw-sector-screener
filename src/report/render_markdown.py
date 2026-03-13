@@ -39,6 +39,7 @@ def render_report(context: dict[str, Any]) -> str:
             f"- output formats：`{','.join(audit.get('output_formats') or []) or 'N/A'}`",
             f"- warnings：`{len(audit.get('warnings') or [])}`",
             f"- output root：`{audit.get('output_root', 'N/A')}`",
+            f"- quarterly store：`{audit.get('quarterly_store_path', 'N/A')}`；period requirement：`{audit.get('quality_period_requirement', 'N/A')}`；refresh run：`{audit.get('refresh_run_id', 'N/A')}`",
         ]
     )
     validation_lines = "- N/A"

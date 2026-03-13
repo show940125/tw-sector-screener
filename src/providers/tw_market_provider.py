@@ -5,13 +5,20 @@ import json
 import re
 import ssl
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from src.analysis.factors import safe_float
+from src.providers.quarterly_store import (
+    get_latest_periods,
+    init_db,
+    insert_fundamental_snapshot,
+    summarize_coverage,
+    upsert_refresh_run,
+)
 from src.themes import core_themes, theme_rule
 
 
@@ -91,6 +98,8 @@ class TwMarketProvider:
         self.timeout = timeout
         self.cache_dir = cache_dir or (Path(__file__).resolve().parents[2] / ".cache" / "market")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.quarterly_store_path = self.cache_dir / "quarterly_fundamentals.sqlite"
+        init_db(self.quarterly_store_path)
         self._twse_valuation_cache: dict[str, dict[str, dict[str, float]]] = {}
         self._tpex_valuation_cache: dict[str, dict[str, dict[str, float]]] = {}
         self._ohlcv_cache: dict[tuple[str, str, str, int], list[dict[str, Any]]] = {}
@@ -150,11 +159,6 @@ class TwMarketProvider:
             cache_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         except Exception:
             return
-
-    def _quarterly_snapshot_dir(self) -> Path:
-        path = self.cache_dir / "quarterly"
-        path.mkdir(parents=True, exist_ok=True)
-        return path
 
     def _symbol_market_from_theme_rules(self, symbol: str) -> str:
         return "TPEx" if symbol.startswith("6") or symbol.startswith("8") else "TWSE"
@@ -328,6 +332,11 @@ class TwMarketProvider:
                 return row
         return None
 
+    def _approx_period(self, as_of: date) -> str:
+        approx_year = as_of.year - 1911
+        approx_quarter = ((max(as_of.month - 1, 0)) // 3) + 1
+        return f"{approx_year}Q{approx_quarter}"
+
     def _load_current_quarter_snapshot(self, symbol: str, market: str, as_of: date) -> dict[str, Any] | None:
         eps_url, income_urls, balance_urls, source_label = self._quarterly_source_urls(market)
         eps_rows = self._get_json(eps_url) or []
@@ -361,30 +370,8 @@ class TwMarketProvider:
                 "eps": [eps_row],
                 "source": source_label,
             }
-            snapshot_path = self._quarterly_snapshot_dir() / f"{snapshot['dataset_key']}-{period}.json"
-            self._write_cache(snapshot_path, snapshot)
             return snapshot
         return None
-
-    def _load_previous_quarterly_snapshot(self, current_period: str, dataset_key: str) -> dict[str, Any] | None:
-        expected_prev = _previous_period(current_period)
-        snapshot_dir = self._quarterly_snapshot_dir()
-        if expected_prev:
-            direct = snapshot_dir / f"{dataset_key}-{expected_prev}.json"
-            payload = self._read_cache(direct, 3650 * 24 * 3600)
-            if isinstance(payload, dict):
-                return payload
-        candidates: list[tuple[str, Path]] = []
-        for path in snapshot_dir.glob(f"{dataset_key}-*.json"):
-            if current_period in path.stem:
-                continue
-            period = path.stem.replace(f"{dataset_key}-", "", 1)
-            candidates.append((period, path))
-        if not candidates:
-            return None
-        candidates.sort(key=lambda item: item[0], reverse=True)
-        payload = self._read_cache(candidates[0][1], 3650 * 24 * 3600)
-        return payload if isinstance(payload, dict) else None
 
     def _extract_quarterly_metrics(self, symbol: str, snapshot: dict[str, Any] | None) -> dict[str, float | None]:
         if not isinstance(snapshot, dict):
@@ -413,44 +400,175 @@ class TwMarketProvider:
         roe = ((net_income / equity) * 400.0) if equity and net_income is not None else None
         return {"gross_margin": gross_margin, "eps": eps, "roe": roe}
 
-    def get_quarterly_fundamentals(self, symbol: str, market: str, as_of: date) -> dict[str, float | None]:
-        flags: list[str] = []
-        missing_reason: str | None = None
-        fetch_status = "unavailable"
-        data_source = f"{market.lower()}_openapi_latest+quarterly_cache"
-        periods_used: list[str] = []
-        current_snapshot: dict[str, Any] | None = None
-        previous_snapshot: dict[str, Any] | None = None
+    def _build_quarterly_store_record(
+        self,
+        symbol: str,
+        market: str,
+        snapshot: dict[str, Any] | None,
+        as_of: date,
+        fetched_at: str,
+        fetch_status: str,
+        missing_reason: str | None,
+    ) -> dict[str, Any]:
+        period = str((snapshot or {}).get("period") or self._approx_period(as_of))
+        dataset_key = str((snapshot or {}).get("dataset_key") or f"{market.lower()}_unknown")
+        source = str((snapshot or {}).get("source") or f"{market.lower()}_openapi")
+        metrics = self._extract_quarterly_metrics(symbol, snapshot)
+        income_row = self._find_row((snapshot or {}).get("income") or [], symbol) or {}
+        balance_row = self._find_row((snapshot or {}).get("balance") or [], symbol) or {}
+        eps_row = self._find_row((snapshot or {}).get("eps") or [], symbol) or {}
+        revenue = safe_float(income_row.get("營業收入"))
+        gross_profit = safe_float(income_row.get("營業毛利（毛損）淨額") or income_row.get("營業毛利毛損淨額"))
+        equity = safe_float(
+            balance_row.get("歸屬於母公司業主之權益合計")
+            or balance_row.get("權益總計")
+            or balance_row.get("權益總額")
+        )
+        net_income = safe_float(
+            eps_row.get("稅後淨利")
+            or eps_row.get("本期淨利（淨損）")
+            or income_row.get("本期淨利（淨損）")
+        )
+        return {
+            "symbol": symbol,
+            "market": market,
+            "period": period,
+            "dataset_key": dataset_key,
+            "source": source,
+            "fetched_at": fetched_at,
+            "as_of_date": as_of.isoformat(),
+            "gross_margin": round(metrics["gross_margin"], 4) if metrics["gross_margin"] is not None else None,
+            "eps": round(metrics["eps"], 4) if metrics["eps"] is not None else None,
+            "roe": round(metrics["roe"], 4) if metrics["roe"] is not None else None,
+            "revenue": revenue,
+            "gross_profit": gross_profit,
+            "net_income": net_income,
+            "equity": equity,
+            "fetch_status": fetch_status,
+            "missing_reason": missing_reason,
+            "raw_payload_json": json.dumps(snapshot or {}, ensure_ascii=False),
+        }
+
+    def _ensure_quarterly_history(self, symbol: str, market: str, as_of: date) -> None:
+        existing = get_latest_periods(
+            self.quarterly_store_path,
+            symbol=symbol,
+            market=market,
+            periods=2,
+            as_of_date=as_of.isoformat(),
+        )
+        if len(existing) >= 2:
+            return
+
+        fetched_at = datetime.now().replace(microsecond=0).isoformat()
         try:
             current_snapshot = self._load_current_quarter_snapshot(symbol, market, as_of)
         except Exception:
-            fetch_status = "fetch_failed"
-            missing_reason = "fetch_failed"
-            flags.append("quality:fetch_failed")
-        if current_snapshot:
-            fetch_status = "ok"
-            periods_used.append(str(current_snapshot.get("period") or ""))
-            previous_snapshot = self._load_previous_quarterly_snapshot(
-                str(current_snapshot.get("period") or ""),
-                str(current_snapshot.get("dataset_key") or ""),
+            insert_fundamental_snapshot(
+                self.quarterly_store_path,
+                {
+                    "symbol": symbol,
+                    "market": market,
+                    "period": self._approx_period(as_of),
+                    "dataset_key": f"{market.lower()}_unknown",
+                    "source": f"{market.lower()}_openapi",
+                    "fetched_at": fetched_at,
+                    "as_of_date": as_of.isoformat(),
+                    "gross_margin": None,
+                    "eps": None,
+                    "roe": None,
+                    "revenue": None,
+                    "gross_profit": None,
+                    "net_income": None,
+                    "equity": None,
+                    "fetch_status": "fetch_failed",
+                    "missing_reason": "fetch_failed",
+                    "raw_payload_json": "{}",
+                },
             )
-            if previous_snapshot:
-                periods_used.append(str(previous_snapshot.get("period") or ""))
-            else:
-                missing_reason = "previous_period_unavailable"
-                flags.append("quality:previous_period_unavailable")
-        elif fetch_status != "fetch_failed":
-            missing_reason = "unavailable"
+            return
+
+        if not current_snapshot:
+            insert_fundamental_snapshot(
+                self.quarterly_store_path,
+                {
+                    "symbol": symbol,
+                    "market": market,
+                    "period": self._approx_period(as_of),
+                    "dataset_key": f"{market.lower()}_unknown",
+                    "source": f"{market.lower()}_openapi",
+                    "fetched_at": fetched_at,
+                    "as_of_date": as_of.isoformat(),
+                    "gross_margin": None,
+                    "eps": None,
+                    "roe": None,
+                    "revenue": None,
+                    "gross_profit": None,
+                    "net_income": None,
+                    "equity": None,
+                    "fetch_status": "unavailable",
+                    "missing_reason": "unavailable",
+                    "raw_payload_json": "{}",
+                },
+            )
+            return
+
+        current_record = self._build_quarterly_store_record(
+            symbol=symbol,
+            market=market,
+            snapshot=current_snapshot,
+            as_of=as_of,
+            fetched_at=fetched_at,
+            fetch_status="ok",
+            missing_reason=None,
+        )
+        if any(current_record.get(key) is None for key in ["gross_margin", "eps", "roe"]):
+            current_record["fetch_status"] = "partial"
+            current_record["missing_reason"] = "partial_metrics"
+        insert_fundamental_snapshot(self.quarterly_store_path, current_record)
+
+    def get_quarterly_fundamentals(self, symbol: str, market: str, as_of: date) -> dict[str, float | None]:
+        flags: list[str] = []
+        self._ensure_quarterly_history(symbol, market, as_of)
+        periods = get_latest_periods(
+            self.quarterly_store_path,
+            symbol=symbol,
+            market=market,
+            periods=2,
+            as_of_date=as_of.isoformat(),
+        )
+        current_row = periods[0] if periods else None
+        previous_row = periods[1] if len(periods) > 1 else None
+        fetch_status = str((current_row or {}).get("fetch_status") or "unavailable")
+        missing_reason = (current_row or {}).get("missing_reason")
+        periods_used = [str(row.get("period") or "") for row in periods if row.get("period")]
+        sources = [str(row.get("source") or "") for row in periods if row.get("source")]
+        data_source = "sqlite:" + ",".join(sorted(dict.fromkeys(sources))) if sources else "sqlite"
+
+        current_metrics = {
+            "gross_margin": (current_row or {}).get("gross_margin"),
+            "eps": (current_row or {}).get("eps"),
+            "roe": (current_row or {}).get("roe"),
+        }
+        previous_metrics = {
+            "gross_margin": (previous_row or {}).get("gross_margin"),
+            "eps": (previous_row or {}).get("eps"),
+            "roe": (previous_row or {}).get("roe"),
+        }
+        if fetch_status == "fetch_failed":
+            flags.append("quality:fetch_failed")
+        elif fetch_status == "unavailable":
             flags.append("quality:unavailable")
-        current_metrics = self._extract_quarterly_metrics(symbol, current_snapshot)
-        previous_metrics = self._extract_quarterly_metrics(symbol, previous_snapshot)
-        if current_snapshot and (
-            current_metrics["gross_margin"] is None or current_metrics["eps"] is None or current_metrics["roe"] is None
-        ):
+        elif fetch_status == "partial":
             flags.append("quality:partial_current_metrics")
-            if fetch_status == "ok":
-                fetch_status = "partial"
-                missing_reason = "partial_metrics"
+
+        if not previous_row:
+            missing_reason = missing_reason or "previous_period_unavailable"
+            flags.append("quality:previous_period_unavailable")
+        elif any(previous_metrics[key] is None for key in ["gross_margin", "eps", "roe"]):
+            missing_reason = missing_reason or "previous_period_unavailable"
+            flags.append("quality:previous_period_unavailable")
+
         return {
             "gross_margin_latest": round(current_metrics["gross_margin"], 2) if current_metrics["gross_margin"] is not None else None,
             "gross_margin_prev": round(previous_metrics["gross_margin"], 2) if previous_metrics["gross_margin"] is not None else None,
@@ -466,58 +584,15 @@ class TwMarketProvider:
         }
 
     def summarize_quality_coverage(self, rows: list[dict[str, Any]], top_n: int = 3) -> dict[str, Any]:
-        total = len(rows)
-        if total <= 0:
-            return {
-                "universe_count": 0,
-                "current_complete_count": 0,
-                "current_complete_pct": 0.0,
-                "previous_complete_count": 0,
-                "previous_complete_pct": 0.0,
-                "ok_count": 0,
-                "unavailable_count": 0,
-                "partial_count": 0,
-                "fetch_failed_count": 0,
-                "top_candidate_gap_count": 0,
-                "top_candidate_gaps": [],
-            }
-
-        def _current_complete(row: dict[str, Any]) -> bool:
-            return all(isinstance(row.get(key), (int, float)) for key in ["gross_margin_latest", "eps_latest", "roe_latest"])
-
-        def _previous_complete(row: dict[str, Any]) -> bool:
-            return all(isinstance(row.get(key), (int, float)) for key in ["gross_margin_prev", "eps_prev", "roe_prev"])
-
-        current_complete_count = sum(1 for row in rows if _current_complete(row))
-        previous_complete_count = sum(1 for row in rows if _previous_complete(row))
-        status_counts = {"ok": 0, "unavailable": 0, "partial": 0, "fetch_failed": 0}
-        top_candidate_gaps: list[dict[str, Any]] = []
-        for index, row in enumerate(rows, start=1):
-            status = str(row.get("quality_fetch_status") or "").strip().lower()
-            if status in status_counts:
-                status_counts[status] += 1
-            if index <= top_n and (not _current_complete(row) or not _previous_complete(row)):
-                top_candidate_gaps.append(
-                    {
-                        "rank": row.get("rank") or index,
-                        "symbol": row.get("symbol"),
-                        "quality_fetch_status": row.get("quality_fetch_status"),
-                        "quality_missing_reason": row.get("quality_missing_reason"),
-                    }
-                )
-        return {
-            "universe_count": total,
-            "current_complete_count": current_complete_count,
-            "current_complete_pct": round((current_complete_count / total) * 100.0, 2),
-            "previous_complete_count": previous_complete_count,
-            "previous_complete_pct": round((previous_complete_count / total) * 100.0, 2),
-            "ok_count": status_counts["ok"],
-            "unavailable_count": status_counts["unavailable"],
-            "partial_count": status_counts["partial"],
-            "fetch_failed_count": status_counts["fetch_failed"],
-            "top_candidate_gap_count": len(top_candidate_gaps),
-            "top_candidate_gaps": top_candidate_gaps,
-        }
+        symbols = [
+            (
+                str(row.get("symbol") or "").strip(),
+                str(row.get("market") or self._symbol_market_from_theme_rules(str(row.get("symbol") or ""))).strip(),
+            )
+            for row in rows
+            if str(row.get("symbol") or "").strip()
+        ]
+        return summarize_coverage(self.quarterly_store_path, symbols, periods_required=2, top_n=top_n)
 
     def refresh_quarterly_snapshots(
         self,
@@ -551,12 +626,34 @@ class TwMarketProvider:
                 }
             refreshed_rows.append({"symbol": symbol, "market": market, **payload})
 
-        summary = self.summarize_quality_coverage(refreshed_rows)
+        summary = summarize_coverage(
+            self.quarterly_store_path,
+            [(row["symbol"], row["market"]) for row in refreshed_rows],
+            periods_required=2,
+            as_of_date=as_of.isoformat(),
+        )
+        run_id = f"refresh-{as_of.strftime('%Y%m%d')}-{theme_mode}"
+        upsert_refresh_run(
+            self.quarterly_store_path,
+            {
+                "run_id": run_id,
+                "as_of_date": as_of.isoformat(),
+                "theme_mode": theme_mode,
+                "themes_json": json.dumps(selected_themes, ensure_ascii=False),
+                "symbol_count": len(refreshed_rows),
+                "current_complete_pct": summary["current_complete_pct"],
+                "previous_complete_pct": summary["previous_complete_pct"],
+                "warnings_json": json.dumps(warnings, ensure_ascii=False),
+                "created_at": datetime.now().replace(microsecond=0).isoformat(),
+            },
+        )
         return {
             "as_of": as_of.isoformat(),
             "theme_mode": theme_mode,
             "themes": theme_payloads,
             "symbol_count": len(refreshed_rows),
+            "quarterly_store_path": str(self.quarterly_store_path),
+            "refresh_run_id": run_id,
             "quality_coverage_summary": summary,
             "rows": refreshed_rows,
             "warnings": warnings,

@@ -11,6 +11,7 @@ from scripts import tw_sector_screener as cli
 class _FakeProvider:
     def __init__(self, timeout: float = 0.1, **_: object) -> None:
         self.timeout = timeout
+        self.quarterly_store_path = Path("C:/tmp/quarterly_fundamentals.sqlite")
 
     def load_theme_universe(self, theme: str, min_monthly_revenue: float = 0.0, theme_mode: str = "strict"):
         return [
@@ -171,6 +172,8 @@ class CliOutputTests(unittest.TestCase):
             self.assertEqual(audit["output_root"], str(output_dir))
             self.assertIn("backtest_config", audit)
             self.assertIn("quality_coverage_summary", audit)
+            self.assertIn("quarterly_store_path", audit)
+            self.assertEqual(audit["quality_period_requirement"], 2)
 
             watchlist = json.loads(outputs["watchlist"].read_text(encoding="utf-8"))
             self.assertIn("rating_change_reason", watchlist["rows"][0])

@@ -389,7 +389,7 @@ def _build_validation_report(
         "windows": windows,
         "limitations": [
             "價格因子使用歷史日線做 point-in-time 驗證；基本面與品質因子目前仍偏向快照型訊號。",
-            "季度品質資料已接最新季與本地快照回補，但更長歷史仍需持續累積。",
+            "季度品質資料已接最新季與 SQLite 歷史累積，但更長歷史仍需持續刷新補厚。",
             "C / D / E 仍待優化：theme coverage expansion、workflow deepening、action engine upgrade。",
         ],
     }
@@ -748,7 +748,7 @@ def run(
         "若 benchmark-relative 轉負且 confidence 下滑，應優先減碼而不是凹單。",
     ]
     if (quality_coverage_summary.get("previous_complete_pct") or 0.0) < 80:
-        risks.append("季度品質前期覆蓋仍未達高水位，quality score 的歷史比較仍需靠快照累積補厚。")
+        risks.append("季度品質前期覆蓋仍未達高水位，quality score 的歷史比較仍需靠 SQLite 歷史累積補厚。")
     if warnings:
         risks.append(f"資料警示：{len(warnings)} 檔抓取失敗，結果可能有抽樣偏誤。")
 
@@ -764,6 +764,9 @@ def run(
         "coverage_list_path": str(coverage_list_path) if coverage_list_path else None,
         "copied_coverage_list_path": str(copied_coverage) if copied_coverage else None,
         "cache_dir": str(getattr(provider, "cache_dir", resolved_output_root / "cache" / "market")),
+        "quarterly_store_path": str(getattr(provider, "quarterly_store_path", resolved_output_root / "cache" / "market" / "quarterly_fundamentals.sqlite")),
+        "refresh_run_id": None,
+        "quality_period_requirement": 2,
         "output_root": str(resolved_output_root),
         "provider_versions": {"market_provider": "twse_openapi+tpex_openapi", "validation_engine": "factor_aware_cross_sectional_v2"},
         "quality_coverage_summary": quality_coverage_summary,
