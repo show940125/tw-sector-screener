@@ -2,44 +2,47 @@
 
 [![test](https://github.com/show940125/tw-sector-screener/actions/workflows/test.yml/badge.svg)](https://github.com/show940125/tw-sector-screener/actions/workflows/test.yml)
 
-`tw-sector-screener` 不是替人下單的黑盒子。  
-它做的事比較老實，也比較有用：把台股題材研究的第一輪工作做對，先把母體收乾淨，再把排序、理由、風險、驗證與追蹤一併交代清楚。
+`tw-sector-screener` 用公開資料整理台股題材研究的第一輪工作。  
+它先處理母體，再整理排序、理由、風險、驗證與追蹤，讓研究工作有一個清楚的起點。
 
-這個 repo 的定位，不是「找神股」；是 `research screener + explainable note generator + workflow adapter`。  
-若你需要的是研究初篩、主題 rerank、watchlist 追蹤、audit trail 與可讀報告，它有用。若你要盤中訊號、自動交易、完整 sell-side 財務模型，它不做，也不該硬做。
+這個 repo 的定位很明白：`research screener + explainable note generator + workflow adapter`。  
+若你的工作在研究初篩、主題 rerank、watchlist 追蹤、audit trail 與可讀報告，這個工具有其位置。若你的目標在盤中訊號、自動交易或完整 sell-side 財務模型，應另用別的工具。
 
 ## Why This Exists
 
-市場上不缺會吐分數的腳本，缺的是肯把分數來龍去脈說明白的工具。  
-真正能進研究流程的工具，至少要回答五件事：
+市場上會吐分數的腳本很多，肯把分數來由交代清楚的工具不多。  
+能進研究流程的工具，至少要回答幾件事：
 
-- 這個題材的母體是什麼
-- 哪些標的值得先研究
-- 為什麼現在看、又為什麼不能太衝
-- 若要加碼或減碼，觸發條件是什麼
-- 這套排序是否經得起基本驗證，而不是只看起來像研究
+- 題材母體是什麼
+- 哪些標的應先研究
+- 為什麼現在值得看
+- 風險在哪裡
+- 何時加碼、何時減碼
+- 這套排序有沒有經過基本驗證
 
-`tw-sector-screener` 就是照這五件事來設計。
+`tw-sector-screener` 就是照這個次序來安排。
 
-## What It Does
+## What It Covers
 
 - 題材池管理：支援 `strict` / `broad`，並提供 curated theme library
-- 研究排序：輸出 `idea_score`，而不是把一個分數假裝成投資結論
+- 研究排序：輸出 `idea_score`
 - 可解釋動作：輸出 `Overweight / Neutral / Underweight`、`why_now`、`why_not`、`add_trigger`、`trim_trigger`
 - 結構化輸出：同時產生 `Markdown / JSON / CSV`
 - 工作流支援：提供 `watchlist`、`audit trail`、`validation report`
 - 資料品質揭露：拆分 `factor_coverage_confidence` 與 `data_freshness_confidence`
 - 本地快取：降低 TWSE / TPEx 重複抓取成本
 
-## What It Does Not Do
+## Boundaries
 
-- 不做盤中訊號
-- 不做自動下單
-- 不做 tick 級交易
-- 不取代完整財務模型
-- 不保證報酬
+這個 repo 目前不處理以下工作：
 
-這些邊界不是保守，是分工。工具的本事，貴在知道自己該做什麼，不該裝什麼。
+- 盤中訊號
+- 自動下單
+- tick 級交易
+- 完整財務模型
+- 保證報酬的推論
+
+工具各有分工。把分工說清楚，後面的判斷才會穩。
 
 ## Current Capability
 
@@ -64,16 +67,23 @@
 
 ## Current Build Status
 
-目前這個版本，已經把最優先的兩件事往前推：
+本版先把最關鍵的兩件事往前推了一步。
 
-- `A / Data Quality Hardening`
-  - 已加入季度快照刷新工具與 quality coverage summary
-  - 報告與 audit 會直接揭露當期/前期品質資料覆蓋率
-- `B / Validation V2`
-  - validation 已升級為 `factor_aware_cross_sectional_v2`
-  - 固定輸出 `1Y / 3Y / 5Y` 視窗與 factor sleeves
+### A / Data Quality Hardening
 
-還沒做完、仍待後續優化的部分：
+- 已加入季度快照刷新工具
+- 已加入 `quality_coverage_summary`
+- 報告與 audit 會直接揭露當期與前期品質資料覆蓋率
+
+### B / Validation V2
+
+- validation 已升級為 `factor_aware_cross_sectional_v2`
+- 固定輸出 `1Y / 3Y / 5Y` 視窗
+- 已提供 `price / fundamental / quality` factor sleeves
+
+### Pending
+
+以下部分仍待後續優化：
 
 - `C / Theme Coverage Expansion`
 - `D / Workflow Deepening`
@@ -84,7 +94,7 @@
 核心 screener 無需額外 API key，主要依賴官方公開資料源。
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
+python "C:\Users\...\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
   --theme AI `
   --theme-mode strict `
   --benchmark TAIEX `
@@ -112,7 +122,7 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
 全類股 Top100 批次快照：
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_universe_top100.py" `
+python "C:\Users\...\.codex\skills\tw-sector-screener\scripts\tw_sector_universe_top100.py" `
   --as-of 2026-03-12 `
   --top-n 100 `
   --lookback 160 `
@@ -123,7 +133,7 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
 季度快照刷新與覆蓋率摘要：
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
+python "C:\Users\...\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
   --as-of 2026-03-12 `
   --theme-mode strict
 ```
@@ -156,18 +166,18 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\refresh_qu
 - TPEx OpenAPI
 - TPEx `afterTrading` API
 
-季度品質資料目前採「官方最新季 + 本地快照回補前一期」模式。這種做法誠實，但也有邊界：  
-最新季通常拿得到，前一期覆蓋會隨你日常執行與快照累積而變厚。這是現階段已知限制，不是 README 詞藻可以掩蓋的事。
+季度品質資料目前採「官方最新季 + 本地快照回補前一期」模式。  
+最新季通常拿得到；前一期覆蓋會隨日常執行與快照累積漸漸變厚。這是現階段的真實限制，文件應當照實說明。
 
 ## How To Read The Report
 
-- `Idea Score`: 研究優先序，不是下單按鈕
+- `Idea Score`: 研究優先序
 - `Confidence`: 結論可靠度
-- `Factor Coverage / Data Freshness`: 分開看缺值問題與資料新鮮度問題
+- `Factor Coverage / Data Freshness`: 一個看缺值，一個看資料新鮮度
 - `Action View`: `Overweight / Neutral / Underweight`
-- `Why Now / Why Not`: 現在能看與不能太衝的理由
-- `Add Trigger / Trim Trigger`: 加碼與減碼的執行條件
-- `Validation`: 目前排序框架的基本驗證結果
+- `Why Now / Why Not`: 現在能看與需要保守的理由
+- `Add Trigger / Trim Trigger`: 加碼與減碼條件
+- `Validation`: 目前排序框架的驗證結果
 - `Audit`: 本次參數、資料來源、警示與快取路徑
 
 ## Repo Layout
@@ -187,12 +197,12 @@ tw-sector-screener/
 
 ## Development Workflow
 
-這個 repo 現在走正式的 `Feature Branch + PR` 流程。
+這個 repo 採 `Feature Branch + PR` 流程。
 
 - `main` 只放可用版本
 - 新功能或方法論調整一律從 `codex/` 前綴分支開始
 - PR 必須附測試結果
-- 若變更 CLI、config 或報告契約，必須同步更新文件與樣本
+- 若變更 CLI、config 或報告契約，需同步更新文件與樣本
 
 具體規則見：
 
@@ -207,21 +217,21 @@ tw-sector-screener/
 - `python -m unittest discover -s tests` 必須通過
 - `tw-sector-screener-output/` 不進 git
 - repo 內只保留人工挑選的 sample reports
-- 影響報告契約的變更，必須同步更新 sample reports
+- 影響報告契約的變更，需同步更新 sample reports
 
 ## Current Limits
 
-這個 repo 目前最該誠實承認的三個限制是：
+目前仍有三個明顯限制：
 
-- 季度品質資料前期覆蓋仍不夠厚
-- validation 仍是 v1，屬於 `price_only_cross_sectional`
-- `AI strict` 題材池純度高，但 coverage 仍偏窄
+- 季度品質資料前期覆蓋仍薄
+- validation 雖已升級，基本面與品質因子仍偏快照型
+- `AI strict` 題材池純度高，coverage 仍偏窄
 
-也正因如此，這個工具現在適合做前端漏斗，不適合裝成完整機構研究平台。
+因此，這個工具適合做研究前端漏斗，離完整機構研究平台還有一段路。
 
 ## Roadmap
 
-下一階段優先順序已經寫定，不再靠臨時起意：
+下一階段優先順序如下：
 
 1. `C / Theme Coverage Expansion`
 2. `D / Workflow Deepening`
