@@ -44,10 +44,23 @@ def render_report(context: dict[str, Any]) -> str:
     validation_lines = "- N/A"
     if validation:
         metrics = validation.get("metrics") or {}
+        windows = validation.get("windows") or {}
+        window_lines: list[str] = []
+        for window_name in ["1y", "3y", "5y"]:
+            payload = windows.get(window_name) or {}
+            if payload.get("status") != "ok":
+                window_lines.append(f"- {window_name}：`insufficient_data`")
+                continue
+            win_metrics = payload.get("metrics") or {}
+            window_lines.append(
+                f"- {window_name}：excess `{_fmt(win_metrics.get('excess_return_pct'))}`% / drawdown `{_fmt(win_metrics.get('max_drawdown_pct'))}`% / hit `{_fmt(win_metrics.get('hit_rate'), 4)}`"
+            )
         validation_lines = "\n".join(
             [
                 f"- mode：`{validation.get('mode', 'N/A')}`；window：`{validation.get('window', 'N/A')}`；rebalance：`{validation.get('rebalance', 'N/A')}`；cost `{_fmt(validation.get('cost_bps'))}` bps",
                 f"- excess return `{_fmt(metrics.get('excess_return_pct'))}`%；max drawdown `{_fmt(metrics.get('max_drawdown_pct'))}`%；hit rate `{_fmt(metrics.get('hit_rate'), 4)}`",
+                f"- factor sleeves：price `{_fmt(((metrics.get('factor_sleeves') or {}).get('price') or {}).get('excess_return_pct'))}`%、fundamental `{_fmt(((metrics.get('factor_sleeves') or {}).get('fundamental') or {}).get('excess_return_pct'))}`%、quality `{_fmt(((metrics.get('factor_sleeves') or {}).get('quality') or {}).get('excess_return_pct'))}`%",
+                *window_lines,
             ]
         )
 
@@ -65,12 +78,14 @@ def render_report(context: dict[str, Any]) -> str:
     sector_lines = "- N/A"
     if sector:
         weights = sector.get("weights") or {}
+        quality = sector.get("quality_coverage_summary") or {}
         weight_text = "、".join(f"{k} {int(float(v) * 100)}%" for k, v in weights.items()) if weights else "N/A"
         sector_lines = "\n".join(
             [
                 f"- 評分母體 `{sector.get('universe_count', 'N/A')}` 檔，Top{sector.get('top_n', 'N/A')} 平均 idea score `{_fmt(sector.get('top_avg_idea'))}` / 平均 confidence `{_fmt(sector.get('top_avg_confidence'))}`",
                 f"- 因子權重：{weight_text}",
                 f"- Benchmark 視角：20D 題材平均 `{_fmt(sector.get('avg_ret_20d'))}`%，相對大盤 `{_fmt(sector.get('avg_rel_to_taiex_20d'))}`%",
+                f"- Quality coverage：當期完整 `{_fmt(quality.get('current_complete_pct'))}`%，前期完整 `{_fmt(quality.get('previous_complete_pct'))}`%",
             ]
         )
 

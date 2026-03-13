@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-from datetime import date
 from typing import Any
 
 
@@ -29,11 +28,19 @@ def _annualized_volatility(period_returns: list[float], periods_per_year: float)
     return math.sqrt(variance) * math.sqrt(periods_per_year) * 100.0
 
 
-def run_cross_sectional_backtest(
+def _score_value(row: dict[str, Any], score_columns: list[str]) -> float:
+    values = [float(row.get(column)) for column in score_columns if isinstance(row.get(column), (int, float))]
+    if not values:
+        return float(row.get("score") or 0.0)
+    return sum(values) / len(values)
+
+
+def _run_strategy_metrics(
     snapshots: list[dict[str, Any]],
     benchmark_series: list[dict[str, Any]],
     top_n: int,
-    cost_bps: float = 0.0,
+    cost_bps: float,
+    score_columns: list[str] | None = None,
 ) -> dict[str, Any]:
     if len(snapshots) < 2:
         return {
@@ -63,7 +70,11 @@ def run_cross_sectional_backtest(
     for idx in range(len(snapshots) - 1):
         current = snapshots[idx]
         future = snapshots[idx + 1]
-        current_rows = sorted(current.get("rows") or [], key=lambda row: float(row.get("score") or 0.0), reverse=True)
+        current_rows = sorted(
+            current.get("rows") or [],
+            key=lambda row: _score_value(row, score_columns or ["score"]),
+            reverse=True,
+        )
         future_map = {row["symbol"]: row for row in future.get("rows") or []}
         picks = current_rows[:top_n]
         holdings = {row["symbol"] for row in picks}
@@ -122,4 +133,41 @@ def run_cross_sectional_backtest(
         "annualized_volatility_pct": round(_annualized_volatility(strategy_period_returns, periods_per_year), 2),
         "turnover_pct": round((turnover_total / max(len(snapshots) - 1, 1)) * 100.0, 2),
         "hit_rate": round(hit_count / max(total_picks, 1), 4),
+    }
+
+
+def run_cross_sectional_backtest(
+    snapshots: list[dict[str, Any]],
+    benchmark_series: list[dict[str, Any]],
+    top_n: int,
+    cost_bps: float = 0.0,
+    factor_groups: dict[str, list[str]] | None = None,
+) -> dict[str, Any]:
+    result = _run_strategy_metrics(snapshots, benchmark_series, top_n, cost_bps, score_columns=["score"])
+    if not factor_groups:
+        return result
+
+    factor_sleeves: dict[str, Any] = {}
+    factor_attribution: dict[str, Any] = {}
+    for group_name, columns in factor_groups.items():
+        factor_sleeves[group_name] = _run_strategy_metrics(snapshots, benchmark_series, top_n, cost_bps, score_columns=columns)
+        selected_values: list[float] = []
+        universe_values: list[float] = []
+        for snapshot in snapshots[:-1]:
+            rows = sorted(snapshot.get("rows") or [], key=lambda row: _score_value(row, columns), reverse=True)
+            picks = rows[:top_n]
+            selected_values.extend(_score_value(row, columns) for row in picks)
+            universe_values.extend(_score_value(row, columns) for row in rows)
+        avg_selected = sum(selected_values) / len(selected_values) if selected_values else 0.0
+        avg_universe = sum(universe_values) / len(universe_values) if universe_values else 0.0
+        factor_attribution[group_name] = {
+            "avg_selected_score": round(avg_selected, 2),
+            "avg_universe_score": round(avg_universe, 2),
+            "selection_edge": round(avg_selected - avg_universe, 2),
+        }
+
+    return {
+        **result,
+        "factor_sleeves": factor_sleeves,
+        "factor_attribution": factor_attribution,
     }

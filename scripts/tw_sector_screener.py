@@ -53,6 +53,10 @@ def _avg(values: list[float | None]) -> float | None:
     return sum(valid) / len(valid)
 
 
+def _safe_avg(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
 def _ret_pct(closes: list[float], days: int) -> float | None:
     if len(closes) <= days:
         return None
@@ -159,6 +163,43 @@ def _score_label(score: float | None) -> str:
     if score <= 33:
         return "low"
     return "mid"
+
+
+def _value_signal(row: dict[str, Any]) -> float:
+    values: list[float] = []
+    pe = row.get("pe")
+    pb = row.get("pb")
+    dividend_yield = row.get("dividend_yield")
+    if isinstance(pe, (int, float)) and pe > 0:
+        values.append(100.0 / float(pe))
+    if isinstance(pb, (int, float)) and pb > 0:
+        values.append(50.0 / float(pb))
+    if isinstance(dividend_yield, (int, float)):
+        values.append(float(dividend_yield))
+    return _safe_avg(values)
+
+
+def _fundamental_signal(row: dict[str, Any]) -> float:
+    values = [float(row.get(key)) for key in ["revenue_yoy", "revenue_mom", "revenue_acceleration"] if isinstance(row.get(key), (int, float))]
+    values.append(_value_signal(row))
+    return _safe_avg([value for value in values if isinstance(value, (int, float))])
+
+
+def _quality_signal(row: dict[str, Any]) -> float:
+    values = [float(row.get(key)) for key in ["gross_margin_trend", "eps_trend", "roe_trend"] if isinstance(row.get(key), (int, float))]
+    return _safe_avg(values)
+
+
+def _price_signal(closes: list[float], close: float, sma20: float | None, sma60: float | None, sma120: float | None) -> float:
+    values: list[float] = []
+    for days in [20, 63, 126]:
+        value = _ret_pct(closes, days)
+        if isinstance(value, (int, float)):
+            values.append(float(value))
+    for avg_value in [sma20, sma60, sma120]:
+        if isinstance(avg_value, (int, float)) and avg_value > 0:
+            values.append(((close / float(avg_value)) - 1.0) * 100.0)
+    return _safe_avg(values)
 
 
 def _event_risk_state(row: dict[str, Any]) -> str:
@@ -268,11 +309,31 @@ def _build_validation_snapshots(raw_rows: list[dict[str, Any]], validation_windo
             if index >= len(candles):
                 continue
             closes = [float(item["close"]) for item in candles[: index + 1]]
-            signal = _avg([_ret_pct(closes, 20), _ret_pct(closes, 63), _ret_pct(closes, 126)])
-            if signal is None:
+            close = float(candles[index]["close"])
+            sma20 = sma(closes, 20)
+            sma60 = sma(closes, 60)
+            sma120 = sma(closes, 120)
+            price_factor_score = _price_signal(closes, close, sma20, sma60, sma120)
+            fundamental_factor_score = _fundamental_signal(row)
+            quality_factor_score = _quality_signal(row)
+            signal_components = [price_factor_score]
+            if fundamental_factor_score != 0.0:
+                signal_components.append(fundamental_factor_score * 0.75)
+            if quality_factor_score != 0.0:
+                signal_components.append(quality_factor_score)
+            if not signal_components:
                 continue
             rebalance_date = candles[index]["date"]
-            rows.append({"symbol": row["symbol"], "close": float(candles[index]["close"]), "score": signal})
+            rows.append(
+                {
+                    "symbol": row["symbol"],
+                    "close": close,
+                    "score": _safe_avg(signal_components),
+                    "price_factor_score": price_factor_score,
+                    "fundamental_factor_score": fundamental_factor_score,
+                    "quality_factor_score": quality_factor_score,
+                }
+            )
         if rebalance_date and rows:
             snapshots.append({"rebalance_date": rebalance_date, "rows": rows})
     return snapshots
@@ -282,6 +343,56 @@ def _slice_benchmark_series(benchmark_series: list[dict[str, Any]], start_date: 
     if start_date is None:
         return benchmark_series
     return [item for item in benchmark_series if item.get("date") >= start_date]
+
+
+def _build_validation_report(
+    raw_rows: list[dict[str, Any]],
+    benchmark_series: list[dict[str, Any]],
+    requested_window: str,
+    rebalance: str,
+    top_n: int,
+    cost_bps: float,
+) -> dict[str, Any]:
+    factor_groups = {
+        "price": ["price_factor_score"],
+        "fundamental": ["fundamental_factor_score"],
+        "quality": ["quality_factor_score"],
+    }
+    windows: dict[str, Any] = {}
+    selected_metrics: dict[str, Any] = {}
+    for window in ["1y", "3y", "5y"]:
+        snapshots = _build_validation_snapshots(raw_rows, window, rebalance)
+        if len(snapshots) < 2:
+            windows[window] = {"status": "insufficient_data"}
+            continue
+        metrics = run_cross_sectional_backtest(
+            snapshots=snapshots,
+            benchmark_series=_slice_benchmark_series(benchmark_series, snapshots[0]["rebalance_date"]),
+            top_n=min(top_n, max(len(raw_rows), 1)),
+            cost_bps=cost_bps,
+            factor_groups=factor_groups,
+        )
+        windows[window] = {"status": "ok", "metrics": metrics}
+        if window == requested_window:
+            selected_metrics = metrics
+    if not selected_metrics and windows:
+        for payload in windows.values():
+            if payload.get("status") == "ok":
+                selected_metrics = payload.get("metrics") or {}
+                break
+    return {
+        "mode": "factor_aware_cross_sectional_v2",
+        "window": requested_window,
+        "rebalance": rebalance,
+        "cost_bps": cost_bps,
+        "metrics": selected_metrics,
+        "windows": windows,
+        "limitations": [
+            "價格因子使用歷史日線做 point-in-time 驗證；基本面與品質因子目前仍偏向快照型訊號。",
+            "季度品質資料已接最新季與本地快照回補，但更長歷史仍需持續累積。",
+            "C / D / E 仍待優化：theme coverage expansion、workflow deepening、action engine upgrade。",
+        ],
+    }
 
 
 def run(
@@ -595,6 +706,7 @@ def run(
         )
 
     top_rows = ranked[:top_n]
+    quality_coverage_summary = provider.summarize_quality_coverage(ranked, top_n=min(3, top_n))
     sector_overview = {
         "universe_count": len(ranked),
         "top_n": len(top_rows),
@@ -603,29 +715,13 @@ def run(
         "avg_ret_20d": theme_avg_ret20,
         "avg_rel_to_taiex_20d": _avg([x.get("rel_to_taiex_20d") for x in raw_rows if isinstance(x.get("rel_to_taiex_20d"), (int, float))]),
         "weights": weights,
+        "quality_coverage_summary": quality_coverage_summary,
     }
 
     validation_summary: dict[str, Any] = {"mode": "not-run", "window": validation_window, "rebalance": rebalance, "cost_bps": cost_bps}
     outputs: dict[str, Path] = {}
     if run_backtest:
-        snapshots = _build_validation_snapshots(raw_rows, validation_window, rebalance)
-        metrics = run_cross_sectional_backtest(
-            snapshots=snapshots,
-            benchmark_series=_slice_benchmark_series(taiex_series, snapshots[0]["rebalance_date"] if snapshots else None),
-            top_n=min(top_n, max(len(raw_rows), 1)),
-            cost_bps=cost_bps,
-        )
-        validation_summary = {
-            "mode": "price_only_cross_sectional",
-            "window": validation_window,
-            "rebalance": rebalance,
-            "cost_bps": cost_bps,
-            "metrics": metrics,
-            "limitations": [
-                "目前回測主要驗證截面排序與價格延續性，不是完整賣方財務模型。",
-                "季度品質因子只在最新季有即時官方資料，前期比較仰賴本地快照累積。",
-            ],
-        }
+        validation_summary = _build_validation_report(raw_rows, taiex_series, validation_window, rebalance, top_n, cost_bps)
         outputs["backtest"] = write_json_report(backtests_dir / f"validation-{theme}-{date_tag}.json", validation_summary)
 
     top_pick = picks[0] if picks else {}
@@ -646,11 +742,13 @@ def run(
         "Action 與 ranking 拆開：排名是研究優先序，Overweight/Neutral/Underweight 才是動作建議。",
     ]
     if run_backtest:
-        method.append("Validation 使用 price-only cross-sectional backtest，先驗證排序有效性，再決定要不要升級更完整模型。")
+        method.append("Validation 已升級成 factor-aware cross-sectional v2，固定輸出 1Y / 3Y / 5Y 視窗與 factor sleeves。")
     risks = [
         "這是研究輔助，不是保證報酬；遇到法說、月營收、AI 出貨節奏變化時，結論需要重新驗證。",
         "若 benchmark-relative 轉負且 confidence 下滑，應優先減碼而不是凹單。",
     ]
+    if (quality_coverage_summary.get("previous_complete_pct") or 0.0) < 80:
+        risks.append("季度品質前期覆蓋仍未達高水位，quality score 的歷史比較仍需靠快照累積補厚。")
     if warnings:
         risks.append(f"資料警示：{len(warnings)} 檔抓取失敗，結果可能有抽樣偏誤。")
 
@@ -667,7 +765,8 @@ def run(
         "copied_coverage_list_path": str(copied_coverage) if copied_coverage else None,
         "cache_dir": str(getattr(provider, "cache_dir", resolved_output_root / "cache" / "market")),
         "output_root": str(resolved_output_root),
-        "provider_versions": {"market_provider": "twse_openapi+tpex_openapi", "validation_engine": "price_only_cross_sectional_v1"},
+        "provider_versions": {"market_provider": "twse_openapi+tpex_openapi", "validation_engine": "factor_aware_cross_sectional_v2"},
+        "quality_coverage_summary": quality_coverage_summary,
         "backtest_config": {"enabled": run_backtest, "window": validation_window, "rebalance": rebalance, "cost_bps": cost_bps},
         "universe_count": len(universe),
         "ranked_count": len(ranked),

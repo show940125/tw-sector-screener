@@ -86,8 +86,23 @@ for theme_name, payload in THEME_LIBRARY.items():
         _ALIAS_INDEX[str(alias).strip().lower()] = theme_name
 
 
+CORE_THEME_NAMES = [
+    "AI",
+    "AI infra",
+    "AI server/ODM",
+    "半導體",
+    "foundry",
+    "IC design",
+    "memory",
+]
+
+
 def available_themes() -> list[str]:
     return list(THEME_LIBRARY.keys())
+
+
+def core_themes() -> list[str]:
+    return [theme for theme in CORE_THEME_NAMES if theme in THEME_LIBRARY]
 
 
 def normalize_theme(theme: str) -> str:
