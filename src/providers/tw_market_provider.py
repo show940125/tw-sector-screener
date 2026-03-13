@@ -12,7 +12,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from src.analysis.factors import safe_float
-from src.themes import theme_rule
+from src.themes import core_themes, theme_rule
 
 
 TWSE_BASICS_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
@@ -155,6 +155,9 @@ class TwMarketProvider:
         path = self.cache_dir / "quarterly"
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def _symbol_market_from_theme_rules(self, symbol: str) -> str:
+        return "TPEx" if symbol.startswith("6") or symbol.startswith("8") else "TWSE"
 
     def _get_json(self, url: str, params: dict[str, Any] | None = None) -> Any:
         query = urlencode(params) if params else ""
@@ -460,6 +463,103 @@ class TwMarketProvider:
             "quality_data_source": data_source,
             "quality_periods_used": [x for x in periods_used if x],
             "data_quality_flags": flags,
+        }
+
+    def summarize_quality_coverage(self, rows: list[dict[str, Any]], top_n: int = 3) -> dict[str, Any]:
+        total = len(rows)
+        if total <= 0:
+            return {
+                "universe_count": 0,
+                "current_complete_count": 0,
+                "current_complete_pct": 0.0,
+                "previous_complete_count": 0,
+                "previous_complete_pct": 0.0,
+                "ok_count": 0,
+                "unavailable_count": 0,
+                "partial_count": 0,
+                "fetch_failed_count": 0,
+                "top_candidate_gap_count": 0,
+                "top_candidate_gaps": [],
+            }
+
+        def _current_complete(row: dict[str, Any]) -> bool:
+            return all(isinstance(row.get(key), (int, float)) for key in ["gross_margin_latest", "eps_latest", "roe_latest"])
+
+        def _previous_complete(row: dict[str, Any]) -> bool:
+            return all(isinstance(row.get(key), (int, float)) for key in ["gross_margin_prev", "eps_prev", "roe_prev"])
+
+        current_complete_count = sum(1 for row in rows if _current_complete(row))
+        previous_complete_count = sum(1 for row in rows if _previous_complete(row))
+        status_counts = {"ok": 0, "unavailable": 0, "partial": 0, "fetch_failed": 0}
+        top_candidate_gaps: list[dict[str, Any]] = []
+        for index, row in enumerate(rows, start=1):
+            status = str(row.get("quality_fetch_status") or "").strip().lower()
+            if status in status_counts:
+                status_counts[status] += 1
+            if index <= top_n and (not _current_complete(row) or not _previous_complete(row)):
+                top_candidate_gaps.append(
+                    {
+                        "rank": row.get("rank") or index,
+                        "symbol": row.get("symbol"),
+                        "quality_fetch_status": row.get("quality_fetch_status"),
+                        "quality_missing_reason": row.get("quality_missing_reason"),
+                    }
+                )
+        return {
+            "universe_count": total,
+            "current_complete_count": current_complete_count,
+            "current_complete_pct": round((current_complete_count / total) * 100.0, 2),
+            "previous_complete_count": previous_complete_count,
+            "previous_complete_pct": round((previous_complete_count / total) * 100.0, 2),
+            "ok_count": status_counts["ok"],
+            "unavailable_count": status_counts["unavailable"],
+            "partial_count": status_counts["partial"],
+            "fetch_failed_count": status_counts["fetch_failed"],
+            "top_candidate_gap_count": len(top_candidate_gaps),
+            "top_candidate_gaps": top_candidate_gaps,
+        }
+
+    def refresh_quarterly_snapshots(
+        self,
+        as_of: date,
+        themes: list[str] | None = None,
+        theme_mode: str = "strict",
+        min_monthly_revenue: float = 0.0,
+    ) -> dict[str, Any]:
+        selected_themes = themes or core_themes()
+        theme_payloads: list[dict[str, Any]] = []
+        all_symbols: dict[str, dict[str, Any]] = {}
+        for theme in selected_themes:
+            rows = self.load_theme_universe(theme, min_monthly_revenue=min_monthly_revenue, theme_mode=theme_mode)
+            symbols = [row["symbol"] for row in rows]
+            theme_payloads.append({"theme": theme, "symbol_count": len(symbols), "symbols": symbols})
+            for row in rows:
+                all_symbols[row["symbol"]] = row
+
+        refreshed_rows: list[dict[str, Any]] = []
+        warnings: list[str] = []
+        for symbol, row in sorted(all_symbols.items()):
+            market = str(row.get("market") or self._symbol_market_from_theme_rules(symbol))
+            try:
+                payload = self.get_quarterly_fundamentals(symbol, market, as_of)
+            except Exception as exc:
+                warnings.append(f"{symbol} refresh failed: {exc}")
+                payload = {
+                    "quality_fetch_status": "fetch_failed",
+                    "quality_missing_reason": "refresh_failed",
+                    "data_quality_flags": ["quality:refresh_failed"],
+                }
+            refreshed_rows.append({"symbol": symbol, "market": market, **payload})
+
+        summary = self.summarize_quality_coverage(refreshed_rows)
+        return {
+            "as_of": as_of.isoformat(),
+            "theme_mode": theme_mode,
+            "themes": theme_payloads,
+            "symbol_count": len(refreshed_rows),
+            "quality_coverage_summary": summary,
+            "rows": refreshed_rows,
+            "warnings": warnings,
         }
 
     def _load_basics(self) -> dict[str, dict[str, Any]]:

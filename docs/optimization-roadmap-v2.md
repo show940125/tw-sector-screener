@@ -5,6 +5,12 @@
 這份 roadmap 不是願望清單，而是照正式評估報告 v2 排過優先級的實作順序。  
 原則只有一條：先補最會拖累研究可信度的缺口，再處理 workflow 深化與體驗優化。
 
+## Current Status
+
+- `Milestone A / P0 Data Quality Hardening`：進行中，本版已補季度快照刷新工具與 quality coverage summary。
+- `Milestone B / P1 Validation V2`：進行中，本版已升級為 `factor_aware_cross_sectional_v2` 與多視窗 validation。
+- `Milestone C / D / E`：尚未完成，仍屬下一輪優化主體。
+
 ## Milestones
 
 ### Milestone A: P0 / Data Quality Hardening

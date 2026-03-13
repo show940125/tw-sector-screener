@@ -80,6 +80,11 @@ class _FakeProvider:
                 "eps_prev": 12.0,
                 "roe_latest": 28.0,
                 "roe_prev": 26.0,
+                "quality_fetch_status": "ok",
+                "quality_missing_reason": None,
+                "quality_data_source": "mock",
+                "quality_periods_used": ["114Q4", "114Q3"],
+                "data_quality_flags": [],
             }
         return {
             "gross_margin_latest": 15.0,
@@ -88,6 +93,26 @@ class _FakeProvider:
             "eps_prev": 3.8,
             "roe_latest": 12.0,
             "roe_prev": 11.0,
+            "quality_fetch_status": "ok",
+            "quality_missing_reason": None,
+            "quality_data_source": "mock",
+            "quality_periods_used": ["114Q4", "114Q3"],
+            "data_quality_flags": [],
+        }
+
+    def summarize_quality_coverage(self, rows, top_n: int = 3):
+        return {
+            "universe_count": len(rows),
+            "current_complete_count": len(rows),
+            "current_complete_pct": 100.0,
+            "previous_complete_count": len(rows),
+            "previous_complete_pct": 100.0,
+            "ok_count": len(rows),
+            "unavailable_count": 0,
+            "partial_count": 0,
+            "fetch_failed_count": 0,
+            "top_candidate_gap_count": 0,
+            "top_candidate_gaps": [],
         }
 
 
@@ -138,10 +163,14 @@ class CliOutputTests(unittest.TestCase):
             self.assertIn("quality_data_source", payload["picks"][0])
             self.assertIn("quality_periods_used", payload["picks"][0])
             self.assertIn("validation_summary", payload)
+            self.assertEqual(payload["validation_summary"]["mode"], "factor_aware_cross_sectional_v2")
+            self.assertIn("windows", payload["validation_summary"])
+            self.assertIn("quality_coverage_summary", payload["sector_overview"])
 
             audit = json.loads(outputs["audit"].read_text(encoding="utf-8"))
             self.assertEqual(audit["output_root"], str(output_dir))
             self.assertIn("backtest_config", audit)
+            self.assertIn("quality_coverage_summary", audit)
 
             watchlist = json.loads(outputs["watchlist"].read_text(encoding="utf-8"))
             self.assertIn("rating_change_reason", watchlist["rows"][0])

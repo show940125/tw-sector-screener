@@ -66,6 +66,22 @@ class ProviderUniverseHelpersTests(unittest.TestCase):
             rows = provider.load_theme_universe("記憶體")
         self.assertEqual([x["symbol"] for x in rows], ["2408"])
 
+    def test_summarize_quality_coverage_counts_current_and_previous(self) -> None:
+        provider = TwMarketProvider(timeout=0.1)
+        rows = [
+            {"symbol": "A", "gross_margin_latest": 10.0, "eps_latest": 1.0, "roe_latest": 5.0, "gross_margin_prev": 9.0, "eps_prev": 0.9, "roe_prev": 4.0, "quality_fetch_status": "ok"},
+            {"symbol": "B", "gross_margin_latest": 10.0, "eps_latest": 1.0, "roe_latest": 5.0, "gross_margin_prev": None, "eps_prev": None, "roe_prev": None, "quality_fetch_status": "ok"},
+            {"symbol": "C", "gross_margin_latest": None, "eps_latest": None, "roe_latest": None, "gross_margin_prev": None, "eps_prev": None, "roe_prev": None, "quality_fetch_status": "unavailable"},
+        ]
+
+        summary = provider.summarize_quality_coverage(rows, top_n=2)
+
+        self.assertEqual(summary["universe_count"], 3)
+        self.assertEqual(summary["current_complete_count"], 2)
+        self.assertEqual(summary["previous_complete_count"], 1)
+        self.assertEqual(summary["current_complete_pct"], 66.67)
+        self.assertEqual(summary["top_candidate_gap_count"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
