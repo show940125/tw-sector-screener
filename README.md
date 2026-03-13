@@ -103,12 +103,12 @@ python "C:\Users\...\.codex\skills\tw-sector-screener\scripts\tw_sector_screener
   --run-backtest `
   --validation-window 1y `
   --output-format md,json,csv `
-  --coverage-list "C:\Users\a0953041880\tw-reports\coverage-list.txt"
+  --coverage-list "C:\Users\...\tw-reports\coverage-list.txt"
 ```
 
 預設官方輸出根目錄：
 
-- `C:\Users\a0953041880\tw-sector-screener-output`
+- `C:\Users\...\tw-sector-screener-output`
 
 主要輸出結構：
 
