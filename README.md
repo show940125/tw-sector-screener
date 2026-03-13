@@ -94,7 +94,7 @@
 核心 screener 無需額外 API key，主要依賴官方公開資料源。
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
+python "C:\Users\...\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
   --theme AI `
   --theme-mode strict `
   --benchmark TAIEX `
@@ -122,7 +122,7 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
 全類股 Top100 批次快照：
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_universe_top100.py" `
+python "C:\Users\...\.codex\skills\tw-sector-screener\scripts\tw_sector_universe_top100.py" `
   --as-of 2026-03-12 `
   --top-n 100 `
   --lookback 160 `
@@ -133,7 +133,7 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
 季度快照刷新與覆蓋率摘要：
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
+python "C:\Users\...\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
   --as-of 2026-03-12 `
   --theme-mode strict
 ```
