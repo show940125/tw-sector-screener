@@ -1,22 +1,23 @@
 ---
 name: tw-sector-screener
-description: Use when screening Taiwan sector/theme stocks (semiconductor, AI, memory) and outputting ranked buy candidates with explainable position plans.
+description: Use when screening Taiwan sector/theme stocks and producing research-grade ranked ideas with confidence, action views, structured outputs, watchlists, and audit trails.
 ---
 
 # TW Sector Screener
 
-用免費資料源做台股「類股/題材」選股，輸出 Top N 候選名單、分數、理由與可執行倉位建議。
+用免費資料源做台股題材/類股研究初篩，輸出可追溯的 `idea ranking + action view`，而不是把一個分數硬扮成投資決策。
 
 ## Use This Skill
 
 適用：
-- 想看整個類股（半導體、AI、記憶體）哪些股票相對值得研究/布局
-- 要有可追蹤的 Markdown 報告（可回測口徑）
-- 要把「分數」轉成可執行倉位規則
+- 想看整個題材或子題材哪些股票值得先研究
+- 需要 `Markdown + JSON + CSV + audit trail + watchlist`
+- 需要把研究排序遷入日常 coverage / rerank 流程
 
 不適用：
 - 即時下單或自動交易
-- Tick 級資料需求
+- Tick 級或盤中訊號
+- 完整 sell-side 財報模型替代品
 
 ## Data Strategy
 
@@ -28,34 +29,71 @@ description: Use when screening Taiwan sector/theme stocks (semiconductor, AI, m
 
 ```powershell
 python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
-  --theme 半導體 `
-  --as-of 2026-02-20 `
-  --top-n 10 `
-  --universe-limit 60
+  --theme AI `
+  --theme-mode strict `
+  --benchmark TAIEX `
+  --as-of 2026-03-12 `
+  --top-n 8 `
+  --run-backtest `
+  --output-format md,json,csv `
+  --coverage-list "C:\Users\a0953041880\tw-reports\coverage-list.txt" `
+  --output-root "C:\Users\a0953041880\tw-sector-screener-output"
+```
+
+全類股 Top100 快照：
+
+```powershell
+python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_universe_top100.py" `
+  --as-of 2026-03-12 `
+  --top-n 100 `
+  --lookback 160 `
+  --bucket-types theme,industry `
+  --max-symbols-per-bucket 160 `
+  --output-dir "C:\Users\a0953041880\tw-sector-screener-output"
 ```
 
 ## Parameters
 
-- `--theme`：類股/主題（必填）
-- `--as-of`：分析截止日 `YYYY-MM-DD`
-- `--top-n`：輸出前 N 檔
-- `--universe-limit`：候選股最大分析數
-- `--min-monthly-revenue`：月營收最低門檻（元）
-- `--lookback`：回看日數（預設 252）
-- `--output-dir`：輸出目錄
+- `--theme`：類股/主題
+- `--theme-mode`：`strict` / `broad`
+- `--benchmark`：`TAIEX` / `sector` / `custom`
+- `--output-format`：`md,json,csv`
+- `--config`：JSON / YAML config
+- `--coverage-list`：watchlist symbol 清單
+- `--run-backtest`
+- `--rebalance`
+- `--cost-bps`
+- `--validation-window`
+- `--top-n`
+- `--universe-limit`
+- `--min-monthly-revenue`
+- `--lookback`
+- `--output-root`
+- `--output-dir`（deprecated）
 
 ## Output Contract
 
-- 檔名：`sector-report-<theme>-<yyyymmdd>.md`
-- 必含章節：
-  - `摘要`
-  - `方法與共識`
-  - `候選清單`
-  - `倉位建議`
-  - `風險提示`
-  - `資料來源`
+- `reports/<yyyymmdd>/<theme>/sector-report-<theme>-<yyyymmdd>.md`
+- `reports/<yyyymmdd>/<theme>/sector-report-<theme>-<yyyymmdd>.json`
+- `reports/<yyyymmdd>/<theme>/sector-report-<theme>-<yyyymmdd>.csv`
+- `audit/<yyyymmdd>/sector-report-<theme>-<yyyymmdd>.audit.json`
+- `watchlists/<theme>/watchlist-<theme>-<yyyymmdd>.json`
+- `backtests/<theme>/validation-<theme>-<yyyymmdd>.json`
+
+報告至少要能回答：
+- 哪些標的應先研究
+- 結論可信度有多高
+- 為什麼現在能看
+- 為什麼不能太衝
+- 何時加碼
+- 何時減碼
 
 ## Notes
 
-- 研究用途，非投資建議。
-- 因子權重預設：Trend 35%、Momentum 25%、Value 20%、Fundamental 15%、Risk 5%。
+- 預設用 `strict` 題材池，避免 AI 題材被 telecom / panel 類 proxy 污染。
+- 缺值會直接反映在 `confidence_score` 與 `data_quality_flags`，不再默默補中性分。
+- `confidence_score` 現在拆成 `factor_coverage_confidence` 與 `data_freshness_confidence`。
+- `quality_score` 目前採官方最新季 + 本地快照回補前一期。
+- `idea score` 是研究優先序；`action view` 才是部位動作。
+- repo 以 `Feature Branch + PR` 維護，分支名稱固定使用 `codex/` 前綴。
+- 官方執行輸出固定放在 `C:\Users\a0953041880\tw-sector-screener-output`，不進 git；repo 內只保留 `examples/sample-reports/` 樣本。
