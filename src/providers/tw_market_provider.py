@@ -13,9 +13,17 @@ from urllib.request import Request, urlopen
 
 from src.analysis.factors import safe_float
 from src.providers.quarterly_store import (
+    claim_backfill_batch,
+    create_backfill_run,
+    enqueue_backfill_targets,
+    finish_backfill_run,
+    get_backfill_run,
+    get_period_rows,
+    get_latest_refresh_run,
     get_latest_periods,
     init_db,
     insert_fundamental_snapshot,
+    mark_backfill_result,
     summarize_coverage,
     upsert_refresh_run,
 )
@@ -103,6 +111,7 @@ class TwMarketProvider:
         self._twse_valuation_cache: dict[str, dict[str, dict[str, float]]] = {}
         self._tpex_valuation_cache: dict[str, dict[str, dict[str, float]]] = {}
         self._ohlcv_cache: dict[tuple[str, str, str, int], list[dict[str, Any]]] = {}
+        self._reported_period_cache: dict[tuple[str, str], str] = {}
 
     def _load_json(self, req: Request) -> Any:
         last_exc: Exception | None = None
@@ -162,6 +171,11 @@ class TwMarketProvider:
 
     def _symbol_market_from_theme_rules(self, symbol: str) -> str:
         return "TPEx" if symbol.startswith("6") or symbol.startswith("8") else "TWSE"
+
+    def _legacy_quarterly_snapshot_dir(self) -> Path:
+        path = self.cache_dir / "quarterly"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     def _get_json(self, url: str, params: dict[str, Any] | None = None) -> Any:
         query = urlencode(params) if params else ""
@@ -337,6 +351,72 @@ class TwMarketProvider:
         approx_quarter = ((max(as_of.month - 1, 0)) // 3) + 1
         return f"{approx_year}Q{approx_quarter}"
 
+    def _recent_periods(self, as_of: date, count: int) -> list[str]:
+        roc_year = as_of.year - 1911
+        quarter = ((as_of.month - 1) // 3) + 1
+        periods: list[str] = []
+        for _ in range(max(count, 0)):
+            periods.append(f"{roc_year}Q{quarter}")
+            quarter -= 1
+            if quarter == 0:
+                quarter = 4
+                roc_year -= 1
+        return periods
+
+    def _period_sequence_from(self, anchor_period: str, count: int) -> list[str]:
+        year_part, quarter_part = anchor_period.split("Q", 1)
+        roc_year = int(year_part)
+        quarter = int(quarter_part)
+        periods: list[str] = []
+        for _ in range(max(count, 0)):
+            periods.append(f"{roc_year}Q{quarter}")
+            quarter -= 1
+            if quarter == 0:
+                quarter = 4
+                roc_year -= 1
+        return periods
+
+    def _latest_reported_period(self, market: str, as_of: date) -> str:
+        cache_key = (market, as_of.isoformat())
+        if cache_key in self._reported_period_cache:
+            return self._reported_period_cache[cache_key]
+        eps_url, _, _, _ = self._quarterly_source_urls(market)
+        rows = self._safe_get_json(eps_url, []) or []
+        best_period = ""
+        if isinstance(rows, list):
+            for row in rows[:200]:
+                period = self._period_from_row(row, as_of)
+                if period > best_period:
+                    best_period = period
+        if not best_period:
+            best_period = self._approx_period(as_of)
+        self._reported_period_cache[cache_key] = best_period
+        return best_period
+
+    def _legacy_quarterly_snapshot(self, symbol: str, market: str, period: str) -> dict[str, Any] | None:
+        snapshot_dir = self._legacy_quarterly_snapshot_dir()
+        for path in snapshot_dir.glob(f"{market.lower()}_*-{period}.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            if self._find_row(payload.get("income") or [], symbol) and self._find_row(payload.get("balance") or [], symbol) and self._find_row(payload.get("eps") or [], symbol):
+                payload = dict(payload)
+                payload["source"] = str(payload.get("source") or "legacy_snapshot")
+                return payload
+        return None
+
+    def _load_snapshot_for_period(self, symbol: str, market: str, period: str, as_of: date) -> dict[str, Any] | None:
+        legacy = self._legacy_quarterly_snapshot(symbol, market, period)
+        if legacy:
+            return legacy
+        current = self._load_current_quarter_snapshot(symbol, market, as_of)
+        if current and str(current.get("period") or "") == period:
+            return current
+        return None
+
     def _load_current_quarter_snapshot(self, symbol: str, market: str, as_of: date) -> dict[str, Any] | None:
         eps_url, income_urls, balance_urls, source_label = self._quarterly_source_urls(market)
         eps_rows = self._get_json(eps_url) or []
@@ -461,6 +541,7 @@ class TwMarketProvider:
             return
 
         fetched_at = datetime.now().replace(microsecond=0).isoformat()
+        target_period = self._latest_reported_period(market, as_of)
         try:
             current_snapshot = self._load_current_quarter_snapshot(symbol, market, as_of)
         except Exception:
@@ -469,7 +550,7 @@ class TwMarketProvider:
                 {
                     "symbol": symbol,
                     "market": market,
-                    "period": self._approx_period(as_of),
+                    "period": target_period,
                     "dataset_key": f"{market.lower()}_unknown",
                     "source": f"{market.lower()}_openapi",
                     "fetched_at": fetched_at,
@@ -494,7 +575,7 @@ class TwMarketProvider:
                 {
                     "symbol": symbol,
                     "market": market,
-                    "period": self._approx_period(as_of),
+                    "period": target_period,
                     "dataset_key": f"{market.lower()}_unknown",
                     "source": f"{market.lower()}_openapi",
                     "fetched_at": fetched_at,
@@ -527,14 +608,101 @@ class TwMarketProvider:
             current_record["missing_reason"] = "partial_metrics"
         insert_fundamental_snapshot(self.quarterly_store_path, current_record)
 
-    def get_quarterly_fundamentals(self, symbol: str, market: str, as_of: date) -> dict[str, float | None]:
-        flags: list[str] = []
-        self._ensure_quarterly_history(symbol, market, as_of)
-        periods = get_latest_periods(
+    def _backfill_single_period(
+        self,
+        symbol: str,
+        market: str,
+        period: str,
+        as_of: date,
+        attempted_at: str,
+    ) -> dict[str, Any]:
+        existing = get_latest_periods(
             self.quarterly_store_path,
             symbol=symbol,
             market=market,
-            periods=2,
+            periods=8,
+            as_of_date=as_of.isoformat(),
+        )
+        if any(str(item.get("period") or "") == period and str(item.get("fetch_status") or "") in {"ok", "partial"} for item in existing):
+            return {"status": "done", "reason": "already_available"}
+
+        try:
+            snapshot = self._load_snapshot_for_period(symbol, market, period, as_of)
+        except Exception as exc:
+            insert_fundamental_snapshot(
+                self.quarterly_store_path,
+                {
+                    "symbol": symbol,
+                    "market": market,
+                    "period": period,
+                    "dataset_key": f"{market.lower()}_unknown",
+                    "source": "backfill",
+                    "fetched_at": attempted_at,
+                    "as_of_date": as_of.isoformat(),
+                    "gross_margin": None,
+                    "eps": None,
+                    "roe": None,
+                    "revenue": None,
+                    "gross_profit": None,
+                    "net_income": None,
+                    "equity": None,
+                    "fetch_status": "fetch_failed",
+                    "missing_reason": "fetch_failed",
+                    "raw_payload_json": "{}",
+                },
+            )
+            return {"status": "failed", "reason": str(exc)}
+
+        if snapshot is None:
+            insert_fundamental_snapshot(
+                self.quarterly_store_path,
+                {
+                    "symbol": symbol,
+                    "market": market,
+                    "period": period,
+                    "dataset_key": f"{market.lower()}_unknown",
+                    "source": "backfill",
+                    "fetched_at": attempted_at,
+                    "as_of_date": as_of.isoformat(),
+                    "gross_margin": None,
+                    "eps": None,
+                    "roe": None,
+                    "revenue": None,
+                    "gross_profit": None,
+                    "net_income": None,
+                    "equity": None,
+                    "fetch_status": "unavailable",
+                    "missing_reason": "unavailable",
+                    "raw_payload_json": "{}",
+                },
+            )
+            return {"status": "unavailable", "reason": "unavailable"}
+
+        record = self._build_quarterly_store_record(
+            symbol=symbol,
+            market=market,
+            snapshot=snapshot,
+            as_of=as_of,
+            fetched_at=attempted_at,
+            fetch_status="ok",
+            missing_reason=None,
+        )
+        if any(record.get(key) is None for key in ["gross_margin", "eps", "roe"]):
+            record["fetch_status"] = "partial"
+            record["missing_reason"] = "partial_metrics"
+        insert_fundamental_snapshot(self.quarterly_store_path, record)
+        return {"status": "done", "reason": record["fetch_status"]}
+
+    def get_quarterly_fundamentals(self, symbol: str, market: str, as_of: date) -> dict[str, float | None]:
+        flags: list[str] = []
+        self._ensure_quarterly_history(symbol, market, as_of)
+        anchor_period = self._latest_reported_period(market, as_of)
+        target_periods = self._period_sequence_from(anchor_period, 2)
+        periods = get_period_rows(
+            self.quarterly_store_path,
+            symbol=symbol,
+            market=market,
+            periods=target_periods,
             as_of_date=as_of.isoformat(),
         )
         current_row = periods[0] if periods else None
@@ -583,7 +751,13 @@ class TwMarketProvider:
             "data_quality_flags": flags,
         }
 
-    def summarize_quality_coverage(self, rows: list[dict[str, Any]], top_n: int = 3) -> dict[str, Any]:
+    def summarize_quality_coverage(
+        self,
+        rows: list[dict[str, Any]],
+        top_n: int = 3,
+        history_depth: int = 8,
+        as_of: date | None = None,
+    ) -> dict[str, Any]:
         symbols = [
             (
                 str(row.get("symbol") or "").strip(),
@@ -592,7 +766,240 @@ class TwMarketProvider:
             for row in rows
             if str(row.get("symbol") or "").strip()
         ]
-        return summarize_coverage(self.quarterly_store_path, symbols, periods_required=2, top_n=top_n)
+        anchor_day = as_of or date.today()
+        anchor_period = self._latest_reported_period("TWSE", anchor_day)
+        return summarize_coverage(
+            self.quarterly_store_path,
+            symbols,
+            periods_required=2,
+            as_of_date=anchor_day.isoformat(),
+            top_n=top_n,
+            history_depth=history_depth,
+            anchor_period=anchor_period,
+        )
+
+    def run_quality_update_check(
+        self,
+        theme: str,
+        universe: list[dict[str, Any]],
+        as_of: date,
+        mode: str = "auto",
+        budget_sec: float = 3.0,
+        history_depth: int = 8,
+        top_n: int = 3,
+        theme_mode: str = "strict",
+    ) -> dict[str, Any]:
+        theme_symbols = [(str(row["symbol"]), str(row["market"])) for row in universe]
+        coverage = summarize_coverage(
+            self.quarterly_store_path,
+            theme_symbols,
+            periods_required=2,
+            as_of_date=as_of.isoformat(),
+            top_n=top_n,
+            history_depth=history_depth,
+            anchor_period=self._latest_reported_period("TWSE", as_of),
+        )
+        latest_refresh = get_latest_refresh_run(self.quarterly_store_path, theme=theme, theme_mode=theme_mode)
+        refresh_run_id = (latest_refresh or {}).get("run_id")
+        stale_days = 1 if as_of.month in {3, 5, 8, 11} else 7
+        refresh_stale = True
+        if latest_refresh and latest_refresh.get("as_of_date"):
+            last_refresh_day = date.fromisoformat(str(latest_refresh["as_of_date"])[:10])
+            refresh_stale = (as_of - last_refresh_day).days >= stale_days
+
+        top_gap_symbols = [item.get("symbol") for item in coverage.get("top_candidate_gaps") or [] if item.get("symbol")]
+        needs_sync = refresh_stale or bool(top_gap_symbols)
+        refreshed_symbols: list[str] = []
+        decision = "no-op"
+        if mode == "skip":
+            decision = "skipped"
+        elif mode == "force" or (mode == "auto" and needs_sync):
+            decision = "forced-sync-repair" if mode == "force" else "sync-repair"
+            deadline = time.monotonic() + max(budget_sec, 0.1)
+            for row in universe:
+                if time.monotonic() > deadline and refreshed_symbols:
+                    break
+                payload = self.get_quarterly_fundamentals(str(row["symbol"]), str(row["market"]), as_of)
+                if payload.get("quality_periods_used"):
+                    refreshed_symbols.append(str(row["symbol"]))
+            coverage = summarize_coverage(
+                self.quarterly_store_path,
+                theme_symbols,
+                periods_required=2,
+                as_of_date=as_of.isoformat(),
+                top_n=top_n,
+                history_depth=history_depth,
+                anchor_period=self._latest_reported_period("TWSE", as_of),
+            )
+
+        backfill_enqueued = False
+        backfill_run_id: str | None = None
+        if coverage.get("history_complete_pct", 0.0) < 100.0 and theme_symbols:
+            anchor_period = self._latest_reported_period("TWSE", as_of)
+            target_periods = self._period_sequence_from(anchor_period, history_depth)
+            queued_count = enqueue_backfill_targets(
+                self.quarterly_store_path,
+                symbols=theme_symbols,
+                periods=target_periods,
+                priority=10 if mode == "force" else 50,
+                source_hint="auto-check",
+            )
+            if queued_count > 0:
+                backfill_enqueued = True
+                backfill_run_id = create_backfill_run(
+                    self.quarterly_store_path,
+                    trigger_type="auto-check",
+                    as_of_date=as_of.isoformat(),
+                    scope_json=json.dumps({"theme": theme, "theme_mode": theme_mode}, ensure_ascii=False),
+                    target_periods_json=json.dumps(target_periods, ensure_ascii=False),
+                    queued_count=queued_count,
+                    started_at=datetime.now().replace(microsecond=0).isoformat(),
+                )
+                finish_backfill_run(
+                    self.quarterly_store_path,
+                    run_id=backfill_run_id,
+                    completed_count=0,
+                    unavailable_count=0,
+                    failed_count=0,
+                    finished_at=datetime.now().replace(microsecond=0).isoformat(),
+                    status="queued",
+                )
+
+        return {
+            "mode": mode,
+            "decision": decision,
+            "refresh_run_id": refresh_run_id,
+            "repair_refreshed_symbols": refreshed_symbols,
+            "history_depth_target": history_depth,
+            "history_complete_pct": coverage.get("history_complete_pct", 0.0),
+            "backfill_enqueued": backfill_enqueued,
+            "backfill_run_id": backfill_run_id,
+        }
+
+    def backfill_quarterly_history(
+        self,
+        as_of: date,
+        themes: list[str],
+        theme_mode: str = "strict",
+        periods: int = 8,
+        only_missing: bool = True,
+        limit_symbols: int | None = None,
+        batch_size: int = 20,
+        force_retry_days: int = 30,
+        trigger_type: str = "manual",
+    ) -> dict[str, Any]:
+        theme_payloads: list[dict[str, Any]] = []
+        all_symbols: dict[str, dict[str, Any]] = {}
+        for theme in themes:
+            rows = self.load_theme_universe(theme, theme_mode=theme_mode)
+            if limit_symbols is not None:
+                rows = rows[:limit_symbols]
+            theme_payloads.append({"theme": theme, "symbol_count": len(rows), "symbols": [row["symbol"] for row in rows]})
+            for row in rows:
+                all_symbols[row["symbol"]] = row
+
+        symbol_pairs = [(str(row["symbol"]), str(row["market"])) for row in all_symbols.values()]
+        anchor_period = self._latest_reported_period("TWSE", as_of)
+        target_periods = self._period_sequence_from(anchor_period, periods)
+        queued_count = enqueue_backfill_targets(
+            self.quarterly_store_path,
+            symbols=symbol_pairs,
+            periods=target_periods,
+            priority=20,
+            source_hint=trigger_type,
+        )
+        started_at = datetime.now().replace(microsecond=0).isoformat()
+        run_id = create_backfill_run(
+            self.quarterly_store_path,
+            trigger_type=trigger_type,
+            as_of_date=as_of.isoformat(),
+            scope_json=json.dumps({"themes": themes, "theme_mode": theme_mode}, ensure_ascii=False),
+            target_periods_json=json.dumps(target_periods, ensure_ascii=False),
+            queued_count=queued_count,
+            started_at=started_at,
+        )
+
+        completed_count = 0
+        unavailable_count = 0
+        failed_count = 0
+        warnings: list[str] = []
+        now_iso = started_at
+        while True:
+            batch = claim_backfill_batch(self.quarterly_store_path, limit=batch_size, now_iso=now_iso)
+            if not batch:
+                break
+            progressed = False
+            for item in batch:
+                last_attempt_at = str(item.get("last_attempt_at") or "")
+                if last_attempt_at:
+                    try:
+                        delta = as_of - date.fromisoformat(last_attempt_at[:10])
+                        if delta.days < force_retry_days and str(item.get("status") or "") in {"failed", "unavailable"}:
+                            continue
+                    except Exception:
+                        pass
+                result = self._backfill_single_period(
+                    symbol=str(item["symbol"]),
+                    market=str(item["market"]),
+                    period=str(item["period"]),
+                    as_of=as_of,
+                    attempted_at=datetime.now().replace(microsecond=0).isoformat(),
+                )
+                mark_backfill_result(
+                    self.quarterly_store_path,
+                    symbol=str(item["symbol"]),
+                    market=str(item["market"]),
+                    period=str(item["period"]),
+                    status=str(result["status"]),
+                    error=None if result["status"] == "done" else str(result.get("reason") or ""),
+                    attempted_at=datetime.now().replace(microsecond=0).isoformat(),
+                )
+                progressed = True
+                if result["status"] == "done":
+                    completed_count += 1
+                elif result["status"] == "unavailable":
+                    unavailable_count += 1
+                else:
+                    failed_count += 1
+                    warnings.append(f"{item['symbol']} {item['period']} backfill failed: {result.get('reason')}")
+            if not progressed:
+                break
+
+        finish_backfill_run(
+            self.quarterly_store_path,
+            run_id=run_id,
+            completed_count=completed_count,
+            unavailable_count=unavailable_count,
+            failed_count=failed_count,
+            finished_at=datetime.now().replace(microsecond=0).isoformat(),
+            status="completed",
+        )
+        summary = summarize_coverage(
+            self.quarterly_store_path,
+            symbol_pairs,
+            periods_required=2,
+            as_of_date=as_of.isoformat(),
+            history_depth=periods,
+            anchor_period=anchor_period,
+        )
+        unresolved_symbols = [item.get("symbol") for item in (summary.get("top_candidate_gaps") or []) if item.get("symbol")]
+        return {
+            "as_of": as_of.isoformat(),
+            "theme_mode": theme_mode,
+            "themes": theme_payloads,
+            "periods": periods,
+            "target_periods": target_periods,
+            "target_symbol_count": len(symbol_pairs),
+            "queued_count": queued_count,
+            "completed_count": completed_count,
+            "unavailable_count": unavailable_count,
+            "failed_count": failed_count,
+            "quarterly_store_path": str(self.quarterly_store_path),
+            "backfill_run_id": run_id,
+            "quality_coverage_summary": summary,
+            "unresolved_symbols": unresolved_symbols,
+            "warnings": warnings,
+        }
 
     def refresh_quarterly_snapshots(
         self,
@@ -631,6 +1038,8 @@ class TwMarketProvider:
             [(row["symbol"], row["market"]) for row in refreshed_rows],
             periods_required=2,
             as_of_date=as_of.isoformat(),
+            history_depth=8,
+            anchor_period=self._latest_reported_period("TWSE", as_of),
         )
         run_id = f"refresh-{as_of.strftime('%Y%m%d')}-{theme_mode}"
         upsert_refresh_run(

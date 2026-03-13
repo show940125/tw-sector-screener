@@ -32,7 +32,7 @@
 ## Samples And Generated Outputs
 
 - 官方執行輸出一律放在：
-  - `C:\Users\a0953041880\tw-sector-screener-output`
+  - `%USERPROFILE%\tw-sector-screener-output`
 - 這個目錄不進 git。
 - repo 內只保留人工挑選的樣本輸出，放在：
   - `examples/sample-reports/`

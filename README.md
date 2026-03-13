@@ -73,6 +73,7 @@
 
 - 已建立 SQLite 季度資料層，路徑固定在官方 output root 下的 `cache/market/quarterly_fundamentals.sqlite`
 - 已加入季度刷新工具與 `quality_coverage_summary`
+- 已加入歷史季度回補 CLI，並支援近 8 季 history coverage 統計
 - 報告與 audit 會直接揭露當期與前期品質資料覆蓋率，以及所用的季度 store 路徑
 
 ### B / Validation V2
@@ -94,7 +95,7 @@
 核心 screener 無需額外 API key，主要依賴官方公開資料源。
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
+python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
   --theme AI `
   --theme-mode strict `
   --benchmark TAIEX `
@@ -102,13 +103,16 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
   --top-n 8 `
   --run-backtest `
   --validation-window 1y `
+  --quality-update-mode auto `
+  --quality-update-budget-sec 3 `
+  --quality-history-depth 8 `
   --output-format md,json,csv `
-  --coverage-list "C:\Users\a0953041880\tw-reports\coverage-list.txt"
+  --coverage-list "%USERPROFILE%\tw-reports\coverage-list.txt"
 ```
 
 預設官方輸出根目錄：
 
-- `C:\Users\a0953041880\tw-sector-screener-output`
+- `%USERPROFILE%\tw-sector-screener-output`
 
 主要輸出結構：
 
@@ -122,7 +126,7 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
 全類股 Top100 批次快照：
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_universe_top100.py" `
+python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_universe_top100.py" `
   --as-of 2026-03-12 `
   --top-n 100 `
   --lookback 160 `
@@ -133,9 +137,19 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
 季度快照刷新與覆蓋率摘要：
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
+python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
   --as-of 2026-03-12 `
   --theme-mode strict
+```
+
+歷史季度回補：
+
+```powershell
+python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\backfill_quarterly_history.py" `
+  --as-of 2026-03-12 `
+  --themes AI,半導體 `
+  --periods 8 `
+  --batch-size 20
 ```
 
 ## CLI Surface
@@ -152,6 +166,9 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\refresh_qu
 - `--rebalance`: `weekly` / `monthly`
 - `--cost-bps`: validation 交易成本
 - `--validation-window`: `1y` / `3y` / `5y`
+- `--quality-update-mode`: `auto` / `skip` / `force`
+- `--quality-update-budget-sec`: 前台更新檢查延遲預算
+- `--quality-history-depth`: history coverage 目標季數
 - `--output-root`: 官方輸出根目錄
 - `--output-dir`: deprecated alias，保留相容
 
@@ -179,6 +196,7 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\refresh_qu
 - `Add Trigger / Trim Trigger`: 加碼與減碼條件
 - `Validation`: 目前排序框架的驗證結果
 - `Audit`: 本次參數、資料來源、警示與快取路徑
+- `History Coverage`: 近 8 季完整覆蓋程度
 
 ## Repo Layout
 

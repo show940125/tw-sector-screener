@@ -12,6 +12,16 @@ class _FakeProvider:
     def __init__(self, timeout: float = 0.1, **_: object) -> None:
         self.timeout = timeout
         self.quarterly_store_path = Path("C:/tmp/quarterly_fundamentals.sqlite")
+        self._decision = {
+            "mode": "auto",
+            "decision": "sync-repair",
+            "history_depth_target": 8,
+            "history_complete_pct": 25.0,
+            "backfill_enqueued": True,
+            "backfill_run_id": "backfill-auto-1",
+            "repair_refreshed_symbols": ["2330"],
+            "refresh_run_id": "refresh-auto-1",
+        }
 
     def load_theme_universe(self, theme: str, min_monthly_revenue: float = 0.0, theme_mode: str = "strict"):
         return [
@@ -101,13 +111,15 @@ class _FakeProvider:
             "data_quality_flags": [],
         }
 
-    def summarize_quality_coverage(self, rows, top_n: int = 3):
+    def summarize_quality_coverage(self, rows, top_n: int = 3, history_depth: int = 8, as_of=None):
         return {
             "universe_count": len(rows),
             "current_complete_count": len(rows),
             "current_complete_pct": 100.0,
             "previous_complete_count": len(rows),
             "previous_complete_pct": 100.0,
+            "history_complete_count": 0,
+            "history_complete_pct": 0.0,
             "ok_count": len(rows),
             "unavailable_count": 0,
             "partial_count": 0,
@@ -115,6 +127,28 @@ class _FakeProvider:
             "top_candidate_gap_count": 0,
             "top_candidate_gaps": [],
         }
+
+    def run_quality_update_check(
+        self,
+        theme: str,
+        universe,
+        as_of: date,
+        mode: str = "auto",
+        budget_sec: float = 3.0,
+        history_depth: int = 8,
+        top_n: int = 3,
+        theme_mode: str = "strict",
+    ):
+        payload = dict(self._decision)
+        payload["mode"] = mode
+        if mode == "skip":
+            payload["decision"] = "skipped"
+            payload["backfill_enqueued"] = False
+            payload["backfill_run_id"] = None
+            payload["repair_refreshed_symbols"] = []
+        elif mode == "force":
+            payload["decision"] = "forced-sync-repair"
+        return payload
 
 
 class CliOutputTests(unittest.TestCase):
@@ -143,6 +177,9 @@ class CliOutputTests(unittest.TestCase):
                     rebalance="monthly",
                     cost_bps=10,
                     validation_window="1y",
+                    quality_update_mode="auto",
+                    quality_update_budget_sec=3.0,
+                    quality_history_depth=8,
                 )
 
             self.assertTrue(outputs["md"].exists())
@@ -174,10 +211,46 @@ class CliOutputTests(unittest.TestCase):
             self.assertIn("quality_coverage_summary", audit)
             self.assertIn("quarterly_store_path", audit)
             self.assertEqual(audit["quality_period_requirement"], 2)
+            self.assertEqual(audit["quality_update_mode"], "auto")
+            self.assertEqual(audit["quality_update_decision"], "sync-repair")
+            self.assertTrue(audit["backfill_enqueued"])
+            self.assertEqual(audit["backfill_run_id"], "backfill-auto-1")
 
             watchlist = json.loads(outputs["watchlist"].read_text(encoding="utf-8"))
             self.assertIn("rating_change_reason", watchlist["rows"][0])
             self.assertIn("event_risk_state", watchlist["rows"][0])
+
+    def test_run_supports_skip_update_mode_without_enqueue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            with patch.object(cli, "TwMarketProvider", _FakeProvider):
+                outputs = cli.run(
+                    theme="AI",
+                    as_of=date(2026, 3, 12),
+                    top_n=2,
+                    universe_limit=10,
+                    min_monthly_revenue=0.0,
+                    lookback=130,
+                    timeout=0.1,
+                    output_root=output_dir,
+                    theme_mode="strict",
+                    benchmark="TAIEX",
+                    output_formats={"json"},
+                    config_path=None,
+                    coverage_list_path=None,
+                    run_backtest=False,
+                    rebalance="monthly",
+                    cost_bps=10,
+                    validation_window="1y",
+                    quality_update_mode="skip",
+                    quality_update_budget_sec=1.0,
+                    quality_history_depth=8,
+                )
+
+            audit = json.loads(outputs["audit"].read_text(encoding="utf-8"))
+            self.assertEqual(audit["quality_update_mode"], "skip")
+            self.assertEqual(audit["quality_update_decision"], "skipped")
+            self.assertFalse(audit["backfill_enqueued"])
 
 
 if __name__ == "__main__":

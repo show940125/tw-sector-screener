@@ -80,7 +80,7 @@
 
 ## Repo Operating Rules
 
-- 官方執行輸出不進 git，固定放在 `C:\Users\a0953041880\tw-sector-screener-output`
+- 官方執行輸出不進 git，固定放在 `%USERPROFILE%\tw-sector-screener-output`
 - repo 只保留 `examples/sample-reports/` 內的人工挑選樣本
 - 每個 milestone 都需要：
   - 測試
