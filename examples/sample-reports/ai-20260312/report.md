@@ -16,13 +16,14 @@ Thesis：AI 類股目前由 `2345` 智邦 領跑，top 5 平均 idea score `66.2
 - 評分母體 `9` 檔，Top5 平均 idea score `66.20` / 平均 confidence `85.56`
 - 因子權重：trend_score 28%、momentum_score 22%、value_score 16%、fundamental_score 16%、quality_score 10%、benchmark_score 5%、risk_control_score 3%
 - Benchmark 視角：20D 題材平均 `10.00`%，相對大盤 `3.81`%
+- Quality coverage：當期完整 `88.89`%，前期完整 `0.00`%
 
 ## 方法與共識
 - Rank 看的是 idea score 與資料可信度的合成，不再把缺值直接補成 50 分。
 - Confidence 拆成 factor coverage 與 data freshness 兩段，避免把資料缺漏跟舊資料混成一團。
 - Benchmark 同時看相對 TAIEX、相對題材、相對產業，避免只用絕對漲幅自嗨。
 - Action 與 ranking 拆開：排名是研究優先序，Overweight/Neutral/Underweight 才是動作建議。
-- Validation 使用 price-only cross-sectional backtest，先驗證排序有效性，再決定要不要升級更完整模型。
+- Validation 已升級成 factor-aware cross-sectional v2，固定輸出 1Y / 3Y / 5Y 視窗與 factor sleeves。
 
 ## 候選清單
 | 排名 | 代碼 | 名稱 | Idea Score | Confidence | Action | Thesis Summary | Why Now | Why Not |
@@ -67,10 +68,15 @@ Thesis：AI 類股目前由 `2345` 智邦 領跑，top 5 平均 idea score `66.2
 ## 風險提示
 - 這是研究輔助，不是保證報酬；遇到法說、月營收、AI 出貨節奏變化時，結論需要重新驗證。
 - 若 benchmark-relative 轉負且 confidence 下滑，應優先減碼而不是凹單。
+- 季度品質前期覆蓋仍未達高水位，quality score 的歷史比較仍需靠快照累積補厚。
 
 ## Validation
-- mode：`price_only_cross_sectional`；window：`1y`；rebalance：`monthly`；cost `10.00` bps
-- excess return `24.36`%；max drawdown `-10.95`%；hit rate `0.6364`
+- mode：`factor_aware_cross_sectional_v2`；window：`1y`；rebalance：`monthly`；cost `10.00` bps
+- excess return `31.02`%；max drawdown `-13.69`%；hit rate `0.6545`
+- factor sleeves：price `24.00`%、fundamental `21.90`%、quality `-5.59`%
+- 1y：excess `31.02`% / drawdown `-13.69`% / hit `0.6545`
+- 3y：excess `23.83`% / drawdown `-15.92`% / hit `0.6167`
+- 5y：excess `23.83`% / drawdown `-15.92`% / hit `0.6167`
 
 ## 資料與流程稽核
 - theme mode：`strict`

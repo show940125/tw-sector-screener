@@ -25,7 +25,39 @@
   "output_root": "C:\\Users\\a0953041880\\tw-sector-screener-output",
   "provider_versions": {
     "market_provider": "twse_openapi+tpex_openapi",
-    "validation_engine": "price_only_cross_sectional_v1"
+    "validation_engine": "factor_aware_cross_sectional_v2"
+  },
+  "quality_coverage_summary": {
+    "universe_count": 9,
+    "current_complete_count": 8,
+    "current_complete_pct": 88.89,
+    "previous_complete_count": 0,
+    "previous_complete_pct": 0.0,
+    "ok_count": 8,
+    "unavailable_count": 1,
+    "partial_count": 0,
+    "fetch_failed_count": 0,
+    "top_candidate_gap_count": 3,
+    "top_candidate_gaps": [
+      {
+        "rank": 1,
+        "symbol": "2345",
+        "quality_fetch_status": "unavailable",
+        "quality_missing_reason": "unavailable"
+      },
+      {
+        "rank": 2,
+        "symbol": "3017",
+        "quality_fetch_status": "ok",
+        "quality_missing_reason": "previous_period_unavailable"
+      },
+      {
+        "rank": 3,
+        "symbol": "6669",
+        "quality_fetch_status": "ok",
+        "quality_missing_reason": "previous_period_unavailable"
+      }
+    ]
   },
   "backtest_config": {
     "enabled": true,

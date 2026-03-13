@@ -25,6 +25,11 @@ description: Use when screening Taiwan sector/theme stocks and producing researc
 1. TWSE OpenAPI + exchangeReport
 2. TPEx OpenAPI + afterTrading API
 
+目前進度：
+- `A / Data Quality Hardening`：已補季度快照刷新與 quality coverage summary
+- `B / Validation V2`：已升級 factor-aware validation
+- `C / D / E`：仍待後續優化
+
 ## Command
 
 ```powershell
@@ -37,6 +42,15 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
   --run-backtest `
   --output-format md,json,csv `
   --coverage-list "C:\Users\a0953041880\tw-reports\coverage-list.txt" `
+  --output-root "C:\Users\a0953041880\tw-sector-screener-output"
+```
+
+季度快照刷新：
+
+```powershell
+python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
+  --as-of 2026-03-12 `
+  --theme-mode strict `
   --output-root "C:\Users\a0953041880\tw-sector-screener-output"
 ```
 

@@ -1,22 +1,290 @@
 {
-  "mode": "price_only_cross_sectional",
+  "mode": "factor_aware_cross_sectional_v2",
   "window": "1y",
   "rebalance": "monthly",
   "cost_bps": 10.0,
   "metrics": {
     "rebalance_count": 11,
-    "strategy_total_return_pct": 61.53,
+    "strategy_total_return_pct": 68.2,
     "benchmark_total_return_pct": 37.18,
     "basket_total_return_pct": 42.71,
-    "excess_return_pct": 24.36,
-    "cost_adjusted_return_pct": 61.53,
-    "max_drawdown_pct": -10.95,
-    "annualized_volatility_pct": 25.08,
-    "turnover_pct": 36.65,
-    "hit_rate": 0.6364
+    "excess_return_pct": 31.02,
+    "cost_adjusted_return_pct": 68.2,
+    "max_drawdown_pct": -13.69,
+    "annualized_volatility_pct": 24.81,
+    "turnover_pct": 18.18,
+    "hit_rate": 0.6545,
+    "factor_sleeves": {
+      "price": {
+        "rebalance_count": 11,
+        "strategy_total_return_pct": 61.18,
+        "benchmark_total_return_pct": 37.18,
+        "basket_total_return_pct": 42.71,
+        "excess_return_pct": 24.0,
+        "cost_adjusted_return_pct": 61.18,
+        "max_drawdown_pct": -10.95,
+        "annualized_volatility_pct": 25.1,
+        "turnover_pct": 34.49,
+        "hit_rate": 0.6364
+      },
+      "fundamental": {
+        "rebalance_count": 11,
+        "strategy_total_return_pct": 59.08,
+        "benchmark_total_return_pct": 37.18,
+        "basket_total_return_pct": 42.71,
+        "excess_return_pct": 21.9,
+        "cost_adjusted_return_pct": 59.08,
+        "max_drawdown_pct": -13.69,
+        "annualized_volatility_pct": 27.45,
+        "turnover_pct": 9.09,
+        "hit_rate": 0.6364
+      },
+      "quality": {
+        "rebalance_count": 11,
+        "strategy_total_return_pct": 31.59,
+        "benchmark_total_return_pct": 37.18,
+        "basket_total_return_pct": 42.71,
+        "excess_return_pct": -5.59,
+        "cost_adjusted_return_pct": 31.59,
+        "max_drawdown_pct": -12.87,
+        "annualized_volatility_pct": 21.72,
+        "turnover_pct": 9.09,
+        "hit_rate": 0.5636
+      }
+    },
+    "factor_attribution": {
+      "price": {
+        "avg_selected_score": 15.06,
+        "avg_universe_score": 7.81,
+        "selection_edge": 7.25
+      },
+      "fundamental": {
+        "avg_selected_score": 36.36,
+        "avg_universe_score": 20.69,
+        "selection_edge": 15.67
+      },
+      "quality": {
+        "avg_selected_score": 0.0,
+        "avg_universe_score": 0.0,
+        "selection_edge": 0.0
+      }
+    }
+  },
+  "windows": {
+    "1y": {
+      "status": "ok",
+      "metrics": {
+        "rebalance_count": 11,
+        "strategy_total_return_pct": 68.2,
+        "benchmark_total_return_pct": 37.18,
+        "basket_total_return_pct": 42.71,
+        "excess_return_pct": 31.02,
+        "cost_adjusted_return_pct": 68.2,
+        "max_drawdown_pct": -13.69,
+        "annualized_volatility_pct": 24.81,
+        "turnover_pct": 18.18,
+        "hit_rate": 0.6545,
+        "factor_sleeves": {
+          "price": {
+            "rebalance_count": 11,
+            "strategy_total_return_pct": 61.18,
+            "benchmark_total_return_pct": 37.18,
+            "basket_total_return_pct": 42.71,
+            "excess_return_pct": 24.0,
+            "cost_adjusted_return_pct": 61.18,
+            "max_drawdown_pct": -10.95,
+            "annualized_volatility_pct": 25.1,
+            "turnover_pct": 34.49,
+            "hit_rate": 0.6364
+          },
+          "fundamental": {
+            "rebalance_count": 11,
+            "strategy_total_return_pct": 59.08,
+            "benchmark_total_return_pct": 37.18,
+            "basket_total_return_pct": 42.71,
+            "excess_return_pct": 21.9,
+            "cost_adjusted_return_pct": 59.08,
+            "max_drawdown_pct": -13.69,
+            "annualized_volatility_pct": 27.45,
+            "turnover_pct": 9.09,
+            "hit_rate": 0.6364
+          },
+          "quality": {
+            "rebalance_count": 11,
+            "strategy_total_return_pct": 31.59,
+            "benchmark_total_return_pct": 37.18,
+            "basket_total_return_pct": 42.71,
+            "excess_return_pct": -5.59,
+            "cost_adjusted_return_pct": 31.59,
+            "max_drawdown_pct": -12.87,
+            "annualized_volatility_pct": 21.72,
+            "turnover_pct": 9.09,
+            "hit_rate": 0.5636
+          }
+        },
+        "factor_attribution": {
+          "price": {
+            "avg_selected_score": 15.06,
+            "avg_universe_score": 7.81,
+            "selection_edge": 7.25
+          },
+          "fundamental": {
+            "avg_selected_score": 36.36,
+            "avg_universe_score": 20.69,
+            "selection_edge": 15.67
+          },
+          "quality": {
+            "avg_selected_score": 0.0,
+            "avg_universe_score": 0.0,
+            "selection_edge": 0.0
+          }
+        }
+      }
+    },
+    "3y": {
+      "status": "ok",
+      "metrics": {
+        "rebalance_count": 12,
+        "strategy_total_return_pct": 62.0,
+        "benchmark_total_return_pct": 38.18,
+        "basket_total_return_pct": 39.34,
+        "excess_return_pct": 23.83,
+        "cost_adjusted_return_pct": 62.0,
+        "max_drawdown_pct": -15.92,
+        "annualized_volatility_pct": 25.33,
+        "turnover_pct": 22.22,
+        "hit_rate": 0.6167,
+        "factor_sleeves": {
+          "price": {
+            "rebalance_count": 12,
+            "strategy_total_return_pct": 62.11,
+            "benchmark_total_return_pct": 38.18,
+            "basket_total_return_pct": 39.34,
+            "excess_return_pct": 23.93,
+            "cost_adjusted_return_pct": 62.11,
+            "max_drawdown_pct": -14.81,
+            "annualized_volatility_pct": 23.63,
+            "turnover_pct": 41.93,
+            "hit_rate": 0.5833
+          },
+          "fundamental": {
+            "rebalance_count": 12,
+            "strategy_total_return_pct": 55.27,
+            "benchmark_total_return_pct": 38.18,
+            "basket_total_return_pct": 39.34,
+            "excess_return_pct": 17.1,
+            "cost_adjusted_return_pct": 55.27,
+            "max_drawdown_pct": -15.76,
+            "annualized_volatility_pct": 26.79,
+            "turnover_pct": 8.33,
+            "hit_rate": 0.6
+          },
+          "quality": {
+            "rebalance_count": 12,
+            "strategy_total_return_pct": 23.65,
+            "benchmark_total_return_pct": 38.18,
+            "basket_total_return_pct": 39.34,
+            "excess_return_pct": -14.53,
+            "cost_adjusted_return_pct": 23.65,
+            "max_drawdown_pct": -15.86,
+            "annualized_volatility_pct": 21.0,
+            "turnover_pct": 8.33,
+            "hit_rate": 0.55
+          }
+        },
+        "factor_attribution": {
+          "price": {
+            "avg_selected_score": 13.92,
+            "avg_universe_score": 6.75,
+            "selection_edge": 7.17
+          },
+          "fundamental": {
+            "avg_selected_score": 36.36,
+            "avg_universe_score": 20.69,
+            "selection_edge": 15.67
+          },
+          "quality": {
+            "avg_selected_score": 0.0,
+            "avg_universe_score": 0.0,
+            "selection_edge": 0.0
+          }
+        }
+      }
+    },
+    "5y": {
+      "status": "ok",
+      "metrics": {
+        "rebalance_count": 12,
+        "strategy_total_return_pct": 62.0,
+        "benchmark_total_return_pct": 38.18,
+        "basket_total_return_pct": 39.34,
+        "excess_return_pct": 23.83,
+        "cost_adjusted_return_pct": 62.0,
+        "max_drawdown_pct": -15.92,
+        "annualized_volatility_pct": 25.33,
+        "turnover_pct": 22.22,
+        "hit_rate": 0.6167,
+        "factor_sleeves": {
+          "price": {
+            "rebalance_count": 12,
+            "strategy_total_return_pct": 62.11,
+            "benchmark_total_return_pct": 38.18,
+            "basket_total_return_pct": 39.34,
+            "excess_return_pct": 23.93,
+            "cost_adjusted_return_pct": 62.11,
+            "max_drawdown_pct": -14.81,
+            "annualized_volatility_pct": 23.63,
+            "turnover_pct": 41.93,
+            "hit_rate": 0.5833
+          },
+          "fundamental": {
+            "rebalance_count": 12,
+            "strategy_total_return_pct": 55.27,
+            "benchmark_total_return_pct": 38.18,
+            "basket_total_return_pct": 39.34,
+            "excess_return_pct": 17.1,
+            "cost_adjusted_return_pct": 55.27,
+            "max_drawdown_pct": -15.76,
+            "annualized_volatility_pct": 26.79,
+            "turnover_pct": 8.33,
+            "hit_rate": 0.6
+          },
+          "quality": {
+            "rebalance_count": 12,
+            "strategy_total_return_pct": 23.65,
+            "benchmark_total_return_pct": 38.18,
+            "basket_total_return_pct": 39.34,
+            "excess_return_pct": -14.53,
+            "cost_adjusted_return_pct": 23.65,
+            "max_drawdown_pct": -15.86,
+            "annualized_volatility_pct": 21.0,
+            "turnover_pct": 8.33,
+            "hit_rate": 0.55
+          }
+        },
+        "factor_attribution": {
+          "price": {
+            "avg_selected_score": 13.92,
+            "avg_universe_score": 6.75,
+            "selection_edge": 7.17
+          },
+          "fundamental": {
+            "avg_selected_score": 36.36,
+            "avg_universe_score": 20.69,
+            "selection_edge": 15.67
+          },
+          "quality": {
+            "avg_selected_score": 0.0,
+            "avg_universe_score": 0.0,
+            "selection_edge": 0.0
+          }
+        }
+      }
+    }
   },
   "limitations": [
-    "目前回測主要驗證截面排序與價格延續性，不是完整賣方財務模型。",
-    "季度品質因子只在最新季有即時官方資料，前期比較仰賴本地快照累積。"
+    "價格因子使用歷史日線做 point-in-time 驗證；基本面與品質因子目前仍偏向快照型訊號。",
+    "季度品質資料已接最新季與本地快照回補，但更長歷史仍需持續累積。",
+    "C / D / E 仍待優化：theme coverage expansion、workflow deepening、action engine upgrade。"
   ]
 }

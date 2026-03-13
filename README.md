@@ -62,6 +62,23 @@
 - validation 摘要
 - audit trail
 
+## Current Build Status
+
+目前這個版本，已經把最優先的兩件事往前推：
+
+- `A / Data Quality Hardening`
+  - 已加入季度快照刷新工具與 quality coverage summary
+  - 報告與 audit 會直接揭露當期/前期品質資料覆蓋率
+- `B / Validation V2`
+  - validation 已升級為 `factor_aware_cross_sectional_v2`
+  - 固定輸出 `1Y / 3Y / 5Y` 視窗與 factor sleeves
+
+還沒做完、仍待後續優化的部分：
+
+- `C / Theme Coverage Expansion`
+- `D / Workflow Deepening`
+- `E / Action Engine Upgrade`
+
 ## Quick Start
 
 核心 screener 無需額外 API key，主要依賴官方公開資料源。
@@ -101,6 +118,14 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
   --lookback 160 `
   --bucket-types theme,industry `
   --max-symbols-per-bucket 160
+```
+
+季度快照刷新與覆蓋率摘要：
+
+```powershell
+python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
+  --as-of 2026-03-12 `
+  --theme-mode strict
 ```
 
 ## CLI Surface
@@ -198,11 +223,9 @@ tw-sector-screener/
 
 下一階段優先順序已經寫定，不再靠臨時起意：
 
-1. `P0 / Data Quality Hardening`
-2. `P1 / Validation V2`
-3. `P1 / Theme Coverage Expansion`
-4. `P2 / Workflow Deepening`
-5. `P2 / Action Engine Upgrade`
+1. `C / Theme Coverage Expansion`
+2. `D / Workflow Deepening`
+3. `E / Action Engine Upgrade`
 
 詳見 [docs/optimization-roadmap-v2.md](./docs/optimization-roadmap-v2.md)。
 
