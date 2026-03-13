@@ -2,11 +2,27 @@
 
 [![test](https://github.com/show940125/tw-sector-screener/actions/workflows/test.yml/badge.svg)](https://github.com/show940125/tw-sector-screener/actions/workflows/test.yml)
 
-`tw-sector-screener` 用公開資料整理台股題材研究的第一輪工作。  
-它先處理母體，再整理排序、理由、風險、驗證與追蹤，讓研究工作有一個清楚的起點。
+`tw-sector-screener` 是一個台股主題研究的初篩工具。  
+它處理的核心問題，是把一整個題材裡原本混在一起的股票，整理成一份可以拿來研究、比較、追蹤的候選名單。
 
-這個 repo 的定位很明白：`research screener + explainable note generator + workflow adapter`。  
-若你的工作在研究初篩、主題 rerank、watchlist 追蹤、audit trail 與可讀報告，這個工具有其位置。若你的目標在盤中訊號、自動交易或完整 sell-side 財務模型，應另用別的工具。
+如果用一句話說，它做的是這件事：  
+先替你決定「這個主題該看哪些股票」，再替你整理「先看誰、理由是什麼、風險在哪裡、後續怎麼追」。
+
+這個工具面對的典型情境，是研究一個題材時，手上先有一個大方向，例如 `AI`、`半導體`、`記憶體`，但還不知道該從哪幾檔開始。  
+它會先建立題材母體，再用公開資料整理價格動能、基本面、品質指標、相對大盤與相對同題材表現，最後輸出一份有排序、有理由、有風險提示的報告。
+
+輸出的結果，不是一串裸分數。  
+它會給你：
+
+- 候選清單
+- 研究優先順序
+- 每檔股票入選的主要理由
+- 加碼與減碼的參考條件
+- 資料完整度與可信度
+- audit trail 與 validation 摘要
+
+因此，這個 repo 最適合拿來做研究工作的第一步。  
+你可以把它當成每天先跑一次的題材雷達，用來縮小範圍、排出先後、追蹤變化，然後再決定哪些標的值得進一步做深入研究。
 
 ## Why This Exists
 
