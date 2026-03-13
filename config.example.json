@@ -1,0 +1,18 @@
+{
+  "weights": {
+    "trend_score": 0.28,
+    "momentum_score": 0.22,
+    "value_score": 0.16,
+    "fundamental_score": 0.16,
+    "quality_score": 0.1,
+    "benchmark_score": 0.05,
+    "risk_control_score": 0.03
+  },
+  "benchmark": {
+    "type": "custom",
+    "symbols": ["2330", "2454", "2382"]
+  },
+  "filters": {
+    "min_monthly_revenue": 1000000000
+  }
+}

@@ -1,105 +1,113 @@
 # TW Sector Screener
 
-台股類股選股工具skill。  
-目標是從一整個主題（例如半導體、AI、記憶體）裡，找出相對值得優先研究的個股，並給出可執行的倉位建議。
+台股題材/產業初篩工具。  
+現在的定位不是「幫你直接下單」，而是把研究排序、信心分數、benchmark-relative 視角、action 建議、watchlist 與 audit trail 一次吐出來，讓它能進日常研究流程。
 
-## 功能
+## 現在能做什麼
 
-- 主題式選股（`半導體`、`AI`、`記憶體`）
-- 多因子評分與排序（Trend / Momentum / Value / Fundamental / Risk）
-- 輸出 Markdown 報告（含前 N 名名單與人話解讀）
-- 倉位建議（上限、分批比例、單筆風險、停損價、股數公式）
-
-## 資料來源
-
-- TWSE OpenAPI + exchangeReport
-- TPEx OpenAPI + afterTrading API
+- 嚴格題材池與廣義題材池切換：`strict` / `broad`
+- 主題拆分：`AI`、`AI infra`、`AI server/ODM`、`memory`、`foundry`、`IC design`、`半導體`
+- 排名與動作分離：`idea score` 不再直接假裝等於下單建議
+- 缺值顯式揭露：`missing_factor_count`、`confidence_score`、`data_quality_flags`
+- Structured outputs：`md`、`json`、`csv`
+- Workflow 輸出：`audit trail`、`watchlist`
+- 本地 cache：降低重複抓 TWSE / TPEx 的等待時間
 
 ## 快速開始
 
-### 1. 直接執行
-
 ```powershell
 python "C:\Users\...\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
-  --theme 半導體 `
-  --as-of 2026-02-20 `
-  --top-n 10 `
-  --universe-limit 60 `
-  --output-dir C:\Users\...\tw-reports
+  --theme AI `
+  --theme-mode strict `
+  --benchmark TAIEX `
+  --as-of 2026-03-12 `
+  --top-n 8 `
+  --run-backtest `
+  --validation-window 1y `
+  --output-format md,json,csv `
+  --coverage-list "C:\Users\a0953041880\tw-reports\coverage-list.txt" `
+  --output-root "C:\Users\a0953041880\tw-sector-screener-output"
 ```
 
-### 2. 查看結果
+輸出根目錄預設固定為：
 
-報告檔名格式：
+- `C:\Users\...\tw-sector-screener-output`
 
-```text
-sector-report-<theme>-<yyyymmdd>.md
-```
+輸出結構：
 
-例如：
+- `reports/<yyyymmdd>/<theme>/sector-report-<theme>-<yyyymmdd>.md`
+- `reports/<yyyymmdd>/<theme>/sector-report-<theme>-<yyyymmdd>.json`
+- `reports/<yyyymmdd>/<theme>/sector-report-<theme>-<yyyymmdd>.csv`
+- `audit/<yyyymmdd>/sector-report-<theme>-<yyyymmdd>.audit.json`
+- `watchlists/<theme>/watchlist-<theme>-<yyyymmdd>.json`
+- `backtests/<theme>/validation-<theme>-<yyyymmdd>.json`
+- `cache/market/`
+- `coverage-lists/`
 
-```text
-C:\Users\...\tw-reports\sector-report-半導體-20260220.md
-```
+## 參數
 
-## 參數說明
-
-- `--theme`：主題名稱（必填）
-- `--as-of`：分析截止日，格式 `YYYY-MM-DD`
+- `--theme`：主題名稱
+- `--theme-mode`：`strict` / `broad`
+- `--benchmark`：`TAIEX` / `sector` / `custom`
+- `--output-format`：逗號分隔，支援 `md`、`json`、`csv`
+- `--config`：JSON/YAML config 路徑
+- `--coverage-list`：watchlist symbol 清單，支援 txt/json
+- `--run-backtest`：輸出 price-only validation report
+- `--rebalance`：`weekly` / `monthly`
+- `--cost-bps`：回測交易成本
+- `--validation-window`：`1y` / `3y` / `5y`
 - `--top-n`：輸出前 N 檔
-- `--universe-limit`：最多分析多少候選股
-- `--min-monthly-revenue`：最低月營收門檻（元）
-- `--lookback`：回看交易日數（預設 252）
-- `--timeout`：HTTP timeout 秒數（預設 10）
-- `--output-dir`：報告輸出資料夾
+- `--universe-limit`：最多分析幾檔
+- `--min-monthly-revenue`：最低月營收門檻
+- `--lookback`：回看日數
+- `--output-root`：官方輸出根目錄
+- `--output-dir`：deprecated alias，仍可用但不建議
 
-## 評分邏輯（預設權重）
+## Config 範例
 
-- Trend：35%
-- Momentum：25%
-- Value：20%
-- Fundamental：15%
-- Risk control：5%
-
-### 因子定義（簡版）
-
-- Trend：均線結構 + RSI（Wilder）
-- Momentum：63/126 日報酬在同主題內的分位
-- Value：PE / PB / 殖利率在同主題內的相對分位
-- Fundamental：月營收 YoY / MoM 分位
-- Risk control：波動率與流動性的相對分位
-
-## 報告內容
-
-每份報告至少包含：
-
-- `摘要`
-- `方法與共識`
-- `候選清單`
-- `倉位建議`
-- `風險提示`
-- `資料來源`
-
-## 倉位建議怎麼用（實務）
-
-報告中會有像這種資訊：
-
-```text
-上限 12.00%、首筆 4.80%、單筆風險 0.40%
-停損價 234.63（距離 15.60%）
-可買股數 = (資金 x 單筆風險%) / (進場價 - 停損價)
+```json
+{
+  "weights": {
+    "trend_score": 0.28,
+    "momentum_score": 0.22,
+    "value_score": 0.16,
+    "fundamental_score": 0.16,
+    "quality_score": 0.10,
+    "benchmark_score": 0.05,
+    "risk_control_score": 0.03
+  },
+  "benchmark": {
+    "type": "custom",
+    "symbols": ["2330", "2454", "2382"]
+  },
+  "filters": {
+    "min_monthly_revenue": 1000000000
+  }
+}
 ```
 
-操作概念：
+## 報告怎麼讀
 
-1. 先決定單檔最多放多少資金（上限%）
-2. 不一次買滿，先下首筆，走勢確認後再分批加碼
-3. 先鎖住單筆最大可承受虧損（單筆風險%）
-4. 用停損距離反推可買股數，避免部位過大
+- `Idea Score`：研究優先序，不是下單按鈕
+- `Confidence`：資料覆蓋度與可用性
+- `Factor Coverage / Data Freshness`：把缺值與資料新鮮度拆開看
+- `Action`：`Overweight` / `Neutral` / `Underweight`
+- `Why Now / Why Not`：現在可看與不能太衝的理由
+- `Add Trigger / Trim Trigger`：加減碼條件
+- `Validation`：看這套排序在近 1Y / 3Y / 5Y 的簡化驗證表現
+- `Audit`：本次參數、警示、cache 與 coverage 設定
 
 ## 注意事項
 
-- 這是研究工具，不是投資建議
-- 分數是排序工具，不保證報酬
-- 建議搭配你自己的進出場規則與風險控管
+- 這是研究輔助工具，不是投顧牌照替代品。
+- 缺值不再補成中性分；看到低 confidence，就該保守，不要硬凹。
+- `quality_score` 目前用官方最新季 + 本地快照回補前期，前期快照會隨你日常執行逐步變完整。
+- 若要用 `benchmark=custom`，請在 config 內提供 `benchmark.symbols`。
 
+## 開發與版本控制
+
+- repo 採 `Feature Branch + PR` 流程，不直接在 `main` 堆功能。
+- 分支名稱固定用 `codex/` 前綴，例如：
+  - `codex/p0-quarterly-snapshot-coverage`
+  - `codex/p1-factor-aware-validation`
+- 官方執行輸出固定在 `C:\Users\...\tw-sector-screener-output`，不進 git。

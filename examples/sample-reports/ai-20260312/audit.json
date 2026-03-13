@@ -1,0 +1,38 @@
+{
+  "theme": "AI",
+  "as_of": "2026-03-12",
+  "theme_mode": "strict",
+  "benchmark": "TAIEX",
+  "output_formats": [
+    "csv",
+    "json",
+    "md"
+  ],
+  "warnings": [],
+  "weights": {
+    "trend_score": 0.28,
+    "momentum_score": 0.22,
+    "value_score": 0.16,
+    "fundamental_score": 0.16,
+    "quality_score": 0.1,
+    "benchmark_score": 0.05,
+    "risk_control_score": 0.03
+  },
+  "config_path": null,
+  "coverage_list_path": null,
+  "copied_coverage_list_path": null,
+  "cache_dir": "C:\\Users\\a0953041880\\tw-sector-screener-output\\cache\\market",
+  "output_root": "C:\\Users\\a0953041880\\tw-sector-screener-output",
+  "provider_versions": {
+    "market_provider": "twse_openapi+tpex_openapi",
+    "validation_engine": "price_only_cross_sectional_v1"
+  },
+  "backtest_config": {
+    "enabled": true,
+    "window": "1y",
+    "rebalance": "monthly",
+    "cost_bps": 10.0
+  },
+  "universe_count": 9,
+  "ranked_count": 9
+}
