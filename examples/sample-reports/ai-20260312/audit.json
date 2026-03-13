@@ -22,6 +22,9 @@
   "coverage_list_path": null,
   "copied_coverage_list_path": null,
   "cache_dir": "C:\\Users\\a0953041880\\tw-sector-screener-output\\cache\\market",
+  "quarterly_store_path": "C:\\Users\\a0953041880\\tw-sector-screener-output\\cache\\market\\quarterly_fundamentals.sqlite",
+  "refresh_run_id": null,
+  "quality_period_requirement": 2,
   "output_root": "C:\\Users\\a0953041880\\tw-sector-screener-output",
   "provider_versions": {
     "market_provider": "twse_openapi+tpex_openapi",

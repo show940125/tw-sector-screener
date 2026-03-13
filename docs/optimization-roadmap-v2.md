@@ -7,8 +7,8 @@
 
 ## Current Status
 
-- `Milestone A / P0 Data Quality Hardening`：進行中，本版已補季度快照刷新工具與 quality coverage summary。
-- `Milestone B / P1 Validation V2`：進行中，本版已升級為 `factor_aware_cross_sectional_v2` 與多視窗 validation。
+- `Milestone A / P0 Data Quality Hardening`：已建立 SQLite 季度資料層，季度刷新、coverage summary、audit metadata 都已接上；歷史厚度仍需持續累積。
+- `Milestone B / P1 Validation V2`：已升級為 `factor_aware_cross_sectional_v2` 與多視窗 validation。
 - `Milestone C / D / E`：尚未完成，仍屬下一輪優化主體。
 
 ## Milestones

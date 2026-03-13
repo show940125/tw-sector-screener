@@ -46,6 +46,8 @@ def _render_markdown(payload: dict[str, object]) -> str:
 - as_of：`{payload.get('as_of')}`
 - theme mode：`{payload.get('theme_mode')}`
 - symbols：`{payload.get('symbol_count')}`
+- quarterly store：`{payload.get('quarterly_store_path')}`
+- refresh run：`{payload.get('refresh_run_id')}`
 
 ## Theme Universe
 {theme_lines}

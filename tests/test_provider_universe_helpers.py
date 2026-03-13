@@ -1,6 +1,9 @@
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
+from src.providers.quarterly_store import init_db, insert_fundamental_snapshot
 from src.providers.tw_market_provider import TwMarketProvider
 
 
@@ -67,14 +70,102 @@ class ProviderUniverseHelpersTests(unittest.TestCase):
         self.assertEqual([x["symbol"] for x in rows], ["2408"])
 
     def test_summarize_quality_coverage_counts_current_and_previous(self) -> None:
-        provider = TwMarketProvider(timeout=0.1)
-        rows = [
-            {"symbol": "A", "gross_margin_latest": 10.0, "eps_latest": 1.0, "roe_latest": 5.0, "gross_margin_prev": 9.0, "eps_prev": 0.9, "roe_prev": 4.0, "quality_fetch_status": "ok"},
-            {"symbol": "B", "gross_margin_latest": 10.0, "eps_latest": 1.0, "roe_latest": 5.0, "gross_margin_prev": None, "eps_prev": None, "roe_prev": None, "quality_fetch_status": "ok"},
-            {"symbol": "C", "gross_margin_latest": None, "eps_latest": None, "roe_latest": None, "gross_margin_prev": None, "eps_prev": None, "roe_prev": None, "quality_fetch_status": "unavailable"},
-        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            provider = TwMarketProvider(timeout=0.1, cache_dir=Path(tmp))
+            init_db(provider.quarterly_store_path)
+            insert_fundamental_snapshot(
+                provider.quarterly_store_path,
+                {
+                    "symbol": "A",
+                    "market": "TWSE",
+                    "period": "114Q4",
+                    "dataset_key": "twse_ci",
+                    "source": "seed",
+                    "fetched_at": "2026-03-12T09:00:00",
+                    "as_of_date": "2026-03-12",
+                    "gross_margin": 10.0,
+                    "eps": 1.0,
+                    "roe": 5.0,
+                    "revenue": 100.0,
+                    "gross_profit": 10.0,
+                    "net_income": 5.0,
+                    "equity": 100.0,
+                    "fetch_status": "ok",
+                    "missing_reason": None,
+                    "raw_payload_json": "{}",
+                },
+            )
+            insert_fundamental_snapshot(
+                provider.quarterly_store_path,
+                {
+                    "symbol": "A",
+                    "market": "TWSE",
+                    "period": "114Q3",
+                    "dataset_key": "twse_ci",
+                    "source": "seed",
+                    "fetched_at": "2026-03-11T09:00:00",
+                    "as_of_date": "2026-03-11",
+                    "gross_margin": 9.0,
+                    "eps": 0.9,
+                    "roe": 4.0,
+                    "revenue": 100.0,
+                    "gross_profit": 9.0,
+                    "net_income": 4.0,
+                    "equity": 100.0,
+                    "fetch_status": "ok",
+                    "missing_reason": None,
+                    "raw_payload_json": "{}",
+                },
+            )
+            insert_fundamental_snapshot(
+                provider.quarterly_store_path,
+                {
+                    "symbol": "B",
+                    "market": "TWSE",
+                    "period": "114Q4",
+                    "dataset_key": "twse_ci",
+                    "source": "seed",
+                    "fetched_at": "2026-03-12T09:00:00",
+                    "as_of_date": "2026-03-12",
+                    "gross_margin": 10.0,
+                    "eps": 1.0,
+                    "roe": 5.0,
+                    "revenue": 100.0,
+                    "gross_profit": 10.0,
+                    "net_income": 5.0,
+                    "equity": 100.0,
+                    "fetch_status": "ok",
+                    "missing_reason": None,
+                    "raw_payload_json": "{}",
+                },
+            )
+            insert_fundamental_snapshot(
+                provider.quarterly_store_path,
+                {
+                    "symbol": "C",
+                    "market": "TWSE",
+                    "period": "114Q4",
+                    "dataset_key": "twse_ci",
+                    "source": "seed",
+                    "fetched_at": "2026-03-12T09:00:00",
+                    "as_of_date": "2026-03-12",
+                    "gross_margin": None,
+                    "eps": None,
+                    "roe": None,
+                    "revenue": None,
+                    "gross_profit": None,
+                    "net_income": None,
+                    "equity": None,
+                    "fetch_status": "unavailable",
+                    "missing_reason": "unavailable",
+                    "raw_payload_json": "{}",
+                },
+            )
 
-        summary = provider.summarize_quality_coverage(rows, top_n=2)
+            summary = provider.summarize_quality_coverage(
+                [{"symbol": "A", "market": "TWSE"}, {"symbol": "B", "market": "TWSE"}, {"symbol": "C", "market": "TWSE"}],
+                top_n=2,
+            )
 
         self.assertEqual(summary["universe_count"], 3)
         self.assertEqual(summary["current_complete_count"], 2)
