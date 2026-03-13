@@ -16,7 +16,7 @@
 ## 快速開始
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
+python "C:\Users\...\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
   --theme AI `
   --theme-mode strict `
   --benchmark TAIEX `
@@ -31,7 +31,7 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
 
 輸出根目錄預設固定為：
 
-- `C:\Users\a0953041880\tw-sector-screener-output`
+- `C:\Users\...\tw-sector-screener-output`
 
 輸出結構：
 
@@ -110,7 +110,4 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
 - 分支名稱固定用 `codex/` 前綴，例如：
   - `codex/p0-quarterly-snapshot-coverage`
   - `codex/p1-factor-aware-validation`
-- 官方執行輸出固定在 `C:\Users\a0953041880\tw-sector-screener-output`，不進 git。
-- repo 內只保留人工挑選樣本，放在 [examples/sample-reports/README.md](/Users/a0953041880/.codex/skills/tw-sector-screener/examples/sample-reports/README.md)。
-- 實作順序與里程碑定義見 [docs/optimization-roadmap-v2.md](/Users/a0953041880/.codex/skills/tw-sector-screener/docs/optimization-roadmap-v2.md)。
-- 具體協作規則見 [CONTRIBUTING.md](/Users/a0953041880/.codex/skills/tw-sector-screener/CONTRIBUTING.md)。
+- 官方執行輸出固定在 `C:\Users\...\tw-sector-screener-output`，不進 git。
