@@ -40,6 +40,7 @@ def render_report(context: dict[str, Any]) -> str:
             f"- warnings：`{len(audit.get('warnings') or [])}`",
             f"- output root：`{audit.get('output_root', 'N/A')}`",
             f"- quarterly store：`{audit.get('quarterly_store_path', 'N/A')}`；period requirement：`{audit.get('quality_period_requirement', 'N/A')}`；refresh run：`{audit.get('refresh_run_id', 'N/A')}`",
+            f"- quality update：mode `{audit.get('quality_update_mode', 'N/A')}` / decision `{audit.get('quality_update_decision', 'N/A')}` / budget `{_fmt(audit.get('quality_update_budget_sec'))}` sec / backfill `{audit.get('backfill_run_id', 'N/A')}`",
         ]
     )
     validation_lines = "- N/A"
@@ -87,6 +88,7 @@ def render_report(context: dict[str, Any]) -> str:
                 f"- 因子權重：{weight_text}",
                 f"- Benchmark 視角：20D 題材平均 `{_fmt(sector.get('avg_ret_20d'))}`%，相對大盤 `{_fmt(sector.get('avg_rel_to_taiex_20d'))}`%",
                 f"- Quality coverage：當期完整 `{_fmt(quality.get('current_complete_pct'))}`%，前期完整 `{_fmt(quality.get('previous_complete_pct'))}`%",
+                f"- History coverage：近 `{sector.get('history_depth_target', 'N/A')}` 季完整覆蓋 `{_fmt(quality.get('history_complete_pct'))}`%",
             ]
         )
 

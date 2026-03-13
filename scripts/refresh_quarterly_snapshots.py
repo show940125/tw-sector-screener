@@ -55,6 +55,7 @@ def _render_markdown(payload: dict[str, object]) -> str:
 ## Coverage Summary
 - current complete：`{summary.get('current_complete_count', 0)}` / `{summary.get('universe_count', 0)}` (`{summary.get('current_complete_pct', 0.0)}%`)
 - previous complete：`{summary.get('previous_complete_count', 0)}` / `{summary.get('universe_count', 0)}` (`{summary.get('previous_complete_pct', 0.0)}%`)
+- history complete：`{summary.get('history_complete_count', 0)}` / `{summary.get('universe_count', 0)}` (`{summary.get('history_complete_pct', 0.0)}%`)
 - status：ok `{summary.get('ok_count', 0)}` / unavailable `{summary.get('unavailable_count', 0)}` / partial `{summary.get('partial_count', 0)}` / fetch_failed `{summary.get('fetch_failed_count', 0)}`
 
 ## Top Candidate Gaps

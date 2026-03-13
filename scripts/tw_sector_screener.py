@@ -43,6 +43,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rebalance", choices=["weekly", "monthly"], default="monthly", help="回測再平衡頻率")
     parser.add_argument("--cost-bps", type=float, default=10.0, help="回測單次換手成本（bps）")
     parser.add_argument("--validation-window", choices=["1y", "3y", "5y"], default="1y", help="validation 視窗")
+    parser.add_argument("--quality-update-mode", choices=["auto", "skip", "force"], default="auto", help="季度資料更新檢查模式")
+    parser.add_argument("--quality-update-budget-sec", type=float, default=3.0, help="前台品質更新檢查的延遲預算")
+    parser.add_argument("--quality-history-depth", type=int, default=8, help="品質歷史覆蓋目標季數")
     return parser.parse_args()
 
 
@@ -414,6 +417,9 @@ def run(
     rebalance: str = "monthly",
     cost_bps: float = 10.0,
     validation_window: str = "1y",
+    quality_update_mode: str = "auto",
+    quality_update_budget_sec: float = 3.0,
+    quality_history_depth: int = 8,
 ) -> dict[str, Path]:
     config = load_config(config_path)
     output_formats = output_formats or {"md", "json", "csv"}
@@ -429,6 +435,16 @@ def run(
     universe = provider.load_theme_universe(theme, min_monthly_revenue=min_revenue, theme_mode=theme_mode)
     if not universe:
         raise RuntimeError(f"找不到主題 {theme} 的候選股")
+    update_result = provider.run_quality_update_check(
+        theme=theme,
+        universe=universe,
+        as_of=as_of,
+        mode=quality_update_mode,
+        budget_sec=quality_update_budget_sec,
+        history_depth=quality_history_depth,
+        top_n=min(3, top_n),
+        theme_mode=theme_mode,
+    )
 
     date_tag = as_of.strftime("%Y%m%d")
     reports_dir = resolved_output_root / "reports" / date_tag / theme
@@ -706,7 +722,12 @@ def run(
         )
 
     top_rows = ranked[:top_n]
-    quality_coverage_summary = provider.summarize_quality_coverage(ranked, top_n=min(3, top_n))
+    quality_coverage_summary = provider.summarize_quality_coverage(
+        ranked,
+        top_n=min(3, top_n),
+        history_depth=quality_history_depth,
+        as_of=as_of,
+    )
     sector_overview = {
         "universe_count": len(ranked),
         "top_n": len(top_rows),
@@ -716,6 +737,7 @@ def run(
         "avg_rel_to_taiex_20d": _avg([x.get("rel_to_taiex_20d") for x in raw_rows if isinstance(x.get("rel_to_taiex_20d"), (int, float))]),
         "weights": weights,
         "quality_coverage_summary": quality_coverage_summary,
+        "history_depth_target": quality_history_depth,
     }
 
     validation_summary: dict[str, Any] = {"mode": "not-run", "window": validation_window, "rebalance": rebalance, "cost_bps": cost_bps}
@@ -749,6 +771,8 @@ def run(
     ]
     if (quality_coverage_summary.get("previous_complete_pct") or 0.0) < 80:
         risks.append("季度品質前期覆蓋仍未達高水位，quality score 的歷史比較仍需靠 SQLite 歷史累積補厚。")
+    if (quality_coverage_summary.get("history_complete_pct") or 0.0) < 80:
+        risks.append(f"近 {quality_history_depth} 季完整覆蓋仍偏薄，長期品質比較要再靠回補批次補齊。")
     if warnings:
         risks.append(f"資料警示：{len(warnings)} 檔抓取失敗，結果可能有抽樣偏誤。")
 
@@ -765,8 +789,16 @@ def run(
         "copied_coverage_list_path": str(copied_coverage) if copied_coverage else None,
         "cache_dir": str(getattr(provider, "cache_dir", resolved_output_root / "cache" / "market")),
         "quarterly_store_path": str(getattr(provider, "quarterly_store_path", resolved_output_root / "cache" / "market" / "quarterly_fundamentals.sqlite")),
-        "refresh_run_id": None,
+        "refresh_run_id": update_result.get("refresh_run_id"),
         "quality_period_requirement": 2,
+        "quality_update_mode": quality_update_mode,
+        "quality_update_decision": update_result.get("decision"),
+        "quality_update_budget_sec": quality_update_budget_sec,
+        "history_depth_target": quality_history_depth,
+        "history_complete_pct": quality_coverage_summary.get("history_complete_pct"),
+        "backfill_enqueued": bool(update_result.get("backfill_enqueued")),
+        "backfill_run_id": update_result.get("backfill_run_id"),
+        "repair_refreshed_symbols": update_result.get("repair_refreshed_symbols") or [],
         "output_root": str(resolved_output_root),
         "provider_versions": {"market_provider": "twse_openapi+tpex_openapi", "validation_engine": "factor_aware_cross_sectional_v2"},
         "quality_coverage_summary": quality_coverage_summary,
@@ -847,6 +879,9 @@ def main() -> int:
             rebalance=args.rebalance,
             cost_bps=args.cost_bps,
             validation_window=args.validation_window,
+            quality_update_mode=args.quality_update_mode,
+            quality_update_budget_sec=args.quality_update_budget_sec,
+            quality_history_depth=args.quality_history_depth,
         )
         for key, path in outputs.items():
             print(f"[tw-sector-screener] {key}: {path}")

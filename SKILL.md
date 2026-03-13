@@ -26,44 +26,58 @@ description: Use when screening Taiwan sector/theme stocks and producing researc
 2. TPEx OpenAPI + afterTrading API
 
 目前進度：
-- `A / Data Quality Hardening`：已建立 SQLite 季度資料層，並補季度刷新與 quality coverage summary
+- `A / Data Quality Hardening`：已建立 SQLite 季度資料層，並補季度刷新、歷史回補與 quality coverage summary
 - `B / Validation V2`：已升級 factor-aware validation
 - `C / D / E`：仍待後續優化
 
 ## Command
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
+python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
   --theme AI `
   --theme-mode strict `
   --benchmark TAIEX `
   --as-of 2026-03-12 `
   --top-n 8 `
   --run-backtest `
+  --quality-update-mode auto `
+  --quality-update-budget-sec 3 `
+  --quality-history-depth 8 `
   --output-format md,json,csv `
-  --coverage-list "C:\Users\a0953041880\tw-reports\coverage-list.txt" `
-  --output-root "C:\Users\a0953041880\tw-sector-screener-output"
+  --coverage-list "%USERPROFILE%\tw-reports\coverage-list.txt" `
+  --output-root "%USERPROFILE%\tw-sector-screener-output"
 ```
 
 季度快照刷新：
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
+python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
   --as-of 2026-03-12 `
   --theme-mode strict `
-  --output-root "C:\Users\a0953041880\tw-sector-screener-output"
+  --output-root "%USERPROFILE%\tw-sector-screener-output"
+```
+
+歷史回補：
+
+```powershell
+python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\backfill_quarterly_history.py" `
+  --as-of 2026-03-12 `
+  --themes AI,半導體 `
+  --periods 8 `
+  --batch-size 20 `
+  --output-root "%USERPROFILE%\tw-sector-screener-output"
 ```
 
 全類股 Top100 快照：
 
 ```powershell
-python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_universe_top100.py" `
+python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_universe_top100.py" `
   --as-of 2026-03-12 `
   --top-n 100 `
   --lookback 160 `
   --bucket-types theme,industry `
   --max-symbols-per-bucket 160 `
-  --output-dir "C:\Users\a0953041880\tw-sector-screener-output"
+  --output-dir "%USERPROFILE%\tw-sector-screener-output"
 ```
 
 ## Parameters
@@ -78,6 +92,9 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
 - `--rebalance`
 - `--cost-bps`
 - `--validation-window`
+- `--quality-update-mode`
+- `--quality-update-budget-sec`
+- `--quality-history-depth`
 - `--top-n`
 - `--universe-limit`
 - `--min-monthly-revenue`
@@ -110,4 +127,4 @@ python "C:\Users\a0953041880\.codex\skills\tw-sector-screener\scripts\tw_sector_
 - `quality_score` 目前採官方最新季抓取 + SQLite append-only 歷史累積。
 - `idea score` 是研究優先序；`action view` 才是部位動作。
 - repo 以 `Feature Branch + PR` 維護，分支名稱固定使用 `codex/` 前綴。
-- 官方執行輸出固定放在 `C:\Users\a0953041880\tw-sector-screener-output`，不進 git；repo 內只保留 `examples/sample-reports/` 樣本。
+- 官方執行輸出固定放在 `%USERPROFILE%\tw-sector-screener-output`，不進 git；repo 內只保留 `examples/sample-reports/` 樣本。

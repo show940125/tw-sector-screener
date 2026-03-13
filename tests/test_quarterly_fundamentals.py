@@ -18,7 +18,7 @@ class QuarterlyFundamentalsTests(unittest.TestCase):
                 {
                     "symbol": "2330",
                     "market": "TWSE",
-                    "period": "113Q3",
+                    "period": "114Q3",
                     "dataset_key": "twse_ci",
                     "source": "sqlite_seed",
                     "fetched_at": "2026-03-11T09:00:00",
@@ -55,7 +55,7 @@ class QuarterlyFundamentalsTests(unittest.TestCase):
         self.assertAlmostEqual(result["roe_latest"], 20.0)
         self.assertAlmostEqual(result["roe_prev"], 16.84, places=2)
         self.assertEqual(result["quality_fetch_status"], "ok")
-        self.assertEqual(result["quality_periods_used"], ["114Q4", "113Q3"])
+        self.assertEqual(result["quality_periods_used"], ["114Q4", "114Q3"])
         self.assertIn("sqlite", result["quality_data_source"])
 
     def test_get_quarterly_fundamentals_marks_fetch_failed(self) -> None:

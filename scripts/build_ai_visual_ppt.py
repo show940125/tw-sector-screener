@@ -50,13 +50,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="AI 類股可視化分析 + PPT 生成")
     parser.add_argument(
         "--csv-path",
-        default=r"C:\Users\a0953041880\tw-reports\hot5\sector-top100-20260220\theme-ai-4e44e520d4.csv",
+        default=str(Path.home() / "tw-reports" / "hot5" / "sector-top100-20260220" / "theme-ai-4e44e520d4.csv"),
         help="AI 類股 CSV 檔",
     )
     parser.add_argument("--as-of", default="2026-02-20", help="分析日期 YYYY-MM-DD")
     parser.add_argument(
         "--output-dir",
-        default=r"C:\Users\a0953041880\tw-reports\hot5",
+        default=str(Path.home() / "tw-reports" / "hot5"),
         help="輸出目錄",
     )
     return parser.parse_args()

@@ -17,6 +17,7 @@ Thesis：AI 類股目前由 `2345` 智邦 領跑，top 8 平均 idea score `61.5
 - 因子權重：trend_score 28%、momentum_score 22%、value_score 16%、fundamental_score 16%、quality_score 10%、benchmark_score 5%、risk_control_score 3%
 - Benchmark 視角：20D 題材平均 `10.00`%，相對大盤 `3.81`%
 - Quality coverage：當期完整 `88.89`%，前期完整 `0.00`%
+- History coverage：近 `8` 季完整覆蓋 `0.00`%
 
 ## 方法與共識
 - Rank 看的是 idea score 與資料可信度的合成，不再把缺值直接補成 50 分。
@@ -87,6 +88,7 @@ Thesis：AI 類股目前由 `2345` 智邦 領跑，top 8 平均 idea score `61.5
 - 這是研究輔助，不是保證報酬；遇到法說、月營收、AI 出貨節奏變化時，結論需要重新驗證。
 - 若 benchmark-relative 轉負且 confidence 下滑，應優先減碼而不是凹單。
 - 季度品質前期覆蓋仍未達高水位，quality score 的歷史比較仍需靠 SQLite 歷史累積補厚。
+- 近 8 季完整覆蓋仍偏薄，長期品質比較要再靠回補批次補齊。
 
 ## Validation
 - mode：`factor_aware_cross_sectional_v2`；window：`1y`；rebalance：`monthly`；cost `10.00` bps
@@ -101,8 +103,9 @@ Thesis：AI 類股目前由 `2345` 智邦 領跑，top 8 平均 idea score `61.5
 - benchmark：`TAIEX`
 - output formats：`csv,json,md`
 - warnings：`0`
-- output root：`C:\Users\a0953041880\tw-sector-screener-output`
-- quarterly store：`C:\Users\a0953041880\tw-sector-screener-output\cache\market\quarterly_fundamentals.sqlite`；period requirement：`2`；refresh run：`None`
+- output root：`%USERPROFILE%\tw-sector-screener-output`
+- quarterly store：`%USERPROFILE%\tw-sector-screener-output\cache\market\quarterly_fundamentals.sqlite`；period requirement：`2`；refresh run：`refresh-20260312-strict`
+- quality update：mode `auto` / decision `sync-repair` / budget `3.00` sec / backfill `backfill-auto-check-7e09038f`
 
 ## 資料來源
 - TWSE OpenAPI
