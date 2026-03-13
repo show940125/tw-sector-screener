@@ -1,5 +1,6 @@
 import unittest
 import tempfile
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -162,10 +163,12 @@ class ProviderUniverseHelpersTests(unittest.TestCase):
                 },
             )
 
-            summary = provider.summarize_quality_coverage(
-                [{"symbol": "A", "market": "TWSE"}, {"symbol": "B", "market": "TWSE"}, {"symbol": "C", "market": "TWSE"}],
-                top_n=2,
-            )
+            with patch.object(provider, "_latest_reported_period", return_value="114Q4"):
+                summary = provider.summarize_quality_coverage(
+                    [{"symbol": "A", "market": "TWSE"}, {"symbol": "B", "market": "TWSE"}, {"symbol": "C", "market": "TWSE"}],
+                    top_n=2,
+                    as_of=date(2026, 3, 12),
+                )
 
         self.assertEqual(summary["universe_count"], 3)
         self.assertEqual(summary["current_complete_count"], 2)
