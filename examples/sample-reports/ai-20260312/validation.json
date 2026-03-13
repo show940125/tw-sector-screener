@@ -1,0 +1,22 @@
+{
+  "mode": "price_only_cross_sectional",
+  "window": "1y",
+  "rebalance": "monthly",
+  "cost_bps": 10.0,
+  "metrics": {
+    "rebalance_count": 11,
+    "strategy_total_return_pct": 61.53,
+    "benchmark_total_return_pct": 37.18,
+    "basket_total_return_pct": 42.71,
+    "excess_return_pct": 24.36,
+    "cost_adjusted_return_pct": 61.53,
+    "max_drawdown_pct": -10.95,
+    "annualized_volatility_pct": 25.08,
+    "turnover_pct": 36.65,
+    "hit_rate": 0.6364
+  },
+  "limitations": [
+    "目前回測主要驗證截面排序與價格延續性，不是完整賣方財務模型。",
+    "季度品質因子只在最新季有即時官方資料，前期比較仰賴本地快照累積。"
+  ]
+}

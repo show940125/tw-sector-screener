@@ -1,2 +1,5 @@
 __pycache__/
 *.py[cod]
+.cache/
+output/
+tw-sector-screener-output/
