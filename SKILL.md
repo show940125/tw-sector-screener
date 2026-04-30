@@ -38,7 +38,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screene
   --theme AI `
   --theme-mode strict `
   --benchmark TAIEX `
-  --as-of 2026-03-12 `
+  --as-of 2026-04-29 `
   --top-n 8 `
   --run-backtest `
   --quality-update-mode auto `
@@ -54,7 +54,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screene
 
 ```powershell
 python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
-  --as-of 2026-03-12 `
+  --as-of 2026-04-29 `
   --theme-mode strict `
   --output-root "%USERPROFILE%\tw-sector-screener-output"
 ```
@@ -63,7 +63,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\refresh_quarterly
 
 ```powershell
 python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\backfill_quarterly_history.py" `
-  --as-of 2026-03-12 `
+  --as-of 2026-04-29 `
   --themes AI,半導體 `
   --periods 8 `
   --batch-size 20 `
@@ -74,7 +74,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\backfill_quarterl
 
 ```powershell
 python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_universe_top100.py" `
-  --as-of 2026-03-12 `
+  --as-of 2026-04-29 `
   --top-n 100 `
   --lookback 160 `
   --bucket-types theme,industry `

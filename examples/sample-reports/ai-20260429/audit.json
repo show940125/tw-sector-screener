@@ -1,6 +1,6 @@
 {
   "theme": "AI",
-  "as_of": "2026-03-12",
+  "as_of": "2026-04-29",
   "theme_mode": "strict",
   "benchmark": "TAIEX",
   "output_formats": [
@@ -23,7 +23,7 @@
   "copied_coverage_list_path": null,
   "cache_dir": "%USERPROFILE%\\tw-sector-screener-output\\cache\\market",
   "quarterly_store_path": "%USERPROFILE%\\tw-sector-screener-output\\cache\\market\\quarterly_fundamentals.sqlite",
-  "refresh_run_id": "refresh-20260312-strict",
+  "refresh_run_id": null,
   "quality_period_requirement": 2,
   "quality_update_mode": "auto",
   "quality_update_decision": "sync-repair",
@@ -31,11 +31,11 @@
   "history_depth_target": 8,
   "history_complete_pct": 0.0,
   "backfill_enqueued": true,
-  "backfill_run_id": "backfill-auto-check-7e09038f",
+  "backfill_run_id": "backfill-auto-check-449800f7",
   "repair_refreshed_symbols": [
     "2330",
-    "3231",
     "2382",
+    "3231",
     "6669",
     "2356",
     "2454",
@@ -50,23 +50,23 @@
   },
   "quality_coverage_summary": {
     "universe_count": 9,
-    "current_complete_count": 8,
-    "current_complete_pct": 88.89,
+    "current_complete_count": 9,
+    "current_complete_pct": 100.0,
     "previous_complete_count": 0,
     "previous_complete_pct": 0.0,
     "history_complete_count": 0,
     "history_complete_pct": 0.0,
-    "ok_count": 8,
-    "unavailable_count": 1,
+    "ok_count": 9,
+    "unavailable_count": 0,
     "partial_count": 0,
     "fetch_failed_count": 0,
     "top_candidate_gap_count": 3,
     "top_candidate_gaps": [
       {
         "rank": 1,
-        "symbol": "2345",
-        "quality_fetch_status": "unavailable",
-        "quality_missing_reason": "unavailable"
+        "symbol": "2382",
+        "quality_fetch_status": "ok",
+        "quality_missing_reason": "previous_period_unavailable"
       },
       {
         "rank": 2,
@@ -76,7 +76,7 @@
       },
       {
         "rank": 3,
-        "symbol": "6669",
+        "symbol": "2356",
         "quality_fetch_status": "ok",
         "quality_missing_reason": "previous_period_unavailable"
       }
@@ -87,6 +87,20 @@
     "window": "1y",
     "rebalance": "monthly",
     "cost_bps": 10.0
+  },
+  "recommendation_policy_version": "tw-recommendation-v1",
+  "recommendation_mode": "deterministic",
+  "llm_review": {
+    "enabled": false,
+    "provider": null,
+    "model": null,
+    "review_top_n": 8,
+    "status": "deterministic-review-fallback"
+  },
+  "recommendation_distribution": {
+    "賣出": 2,
+    "持有": 5,
+    "買入": 1
   },
   "universe_count": 9,
   "ranked_count": 9

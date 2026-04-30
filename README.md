@@ -129,7 +129,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screene
   --theme AI `
   --theme-mode strict `
   --benchmark TAIEX `
-  --as-of 2026-03-12 `
+  --as-of 2026-04-29 `
   --top-n 8 `
   --run-backtest `
   --validation-window 1y `
@@ -162,7 +162,7 @@ LLM review 範例：
 python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
   --theme AI `
   --theme-mode strict `
-  --as-of 2026-03-12 `
+  --as-of 2026-04-29 `
   --top-n 8 `
   --recommendation-mode llm-review `
   --review-top-n 8 `
@@ -174,7 +174,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screene
 
 ```powershell
 python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_universe_top100.py" `
-  --as-of 2026-03-12 `
+  --as-of 2026-04-29 `
   --top-n 100 `
   --lookback 160 `
   --bucket-types theme,industry `
@@ -185,7 +185,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_univers
 
 ```powershell
 python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
-  --as-of 2026-03-12 `
+  --as-of 2026-04-29 `
   --theme-mode strict
 ```
 
@@ -193,7 +193,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\refresh_quarterly
 
 ```powershell
 python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\backfill_quarterly_history.py" `
-  --as-of 2026-03-12 `
+  --as-of 2026-04-29 `
   --themes AI,半導體 `
   --periods 8 `
   --batch-size 20
@@ -323,9 +323,10 @@ tw-sector-screener/
 repo 內只追蹤少量樣本，不追蹤完整執行輸出。  
 目前保留的樣本見：
 
-- [examples/sample-reports/ai-20260312/report.md](./examples/sample-reports/ai-20260312/report.md)
-- [examples/sample-reports/ai-20260312/audit.json](./examples/sample-reports/ai-20260312/audit.json)
-- [examples/sample-reports/ai-20260312/validation.json](./examples/sample-reports/ai-20260312/validation.json)
+- [examples/sample-reports/ai-20260429/report.md](./examples/sample-reports/ai-20260429/report.md)
+- [examples/sample-reports/ai-20260429/audit.json](./examples/sample-reports/ai-20260429/audit.json)
+- [examples/sample-reports/ai-20260429/validation.json](./examples/sample-reports/ai-20260429/validation.json)
+- [examples/sample-reports/ai-20260429/decision-review.json](./examples/sample-reports/ai-20260429/decision-review.json)
 
 ## License
 
