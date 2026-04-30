@@ -16,8 +16,10 @@
 
 - 候選清單
 - 研究優先順序
+- `買入 / 持有 / 賣出` 研究建議評估
 - 每檔股票入選的主要理由
 - 加碼與減碼的參考條件
+- confidence / risk / evidence refs
 - 資料完整度與可信度
 - audit trail 與 validation 摘要
 
@@ -43,6 +45,8 @@
 - 題材池管理：支援 `strict` / `broad`，並提供 curated theme library
 - 研究排序：輸出 `idea_score`
 - 可解釋動作：輸出 `買入 / 持有 / 賣出` 研究建議評估，以及 `Overweight / Neutral / Underweight`、`why_now`、`why_not`、`add_trigger`、`trim_trigger`
+- 決策風險層：每檔候選輸出 `confidence_score`、`risk_score`、`target_range`、失效條件與 evidence refs
+- 可選 LLM review：支援 `llm-review` 模式，失敗或格式不合時回落 deterministic recommendation
 - 結構化輸出：同時產生 `Markdown / JSON / CSV`
 - 工作流支援：提供 `watchlist`、`audit trail`、`validation report`
 - 決策紀錄：輸出 `decision-review` JSON 與 SQLite decision ledger
@@ -77,14 +81,15 @@
 
 - 題材摘要與市場總覽
 - 候選清單與排名
+- `買入 / 持有 / 賣出` 建議分布
 - benchmark-relative 視角
-- 倉位建議與加減碼條件
+- 倉位建議、加減碼條件與失效條件
 - validation 摘要
 - audit trail
 
 ## Current Build Status
 
-本版先把最關鍵的兩件事往前推了一步。
+本版已把排序、資料品質、validation 與研究建議評估接起來。排序仍由 deterministic factor engine 主導；recommendation decision layer 只負責把候選標的翻成後續研究動作，不反向改寫排名。
 
 ### A / Data Quality Hardening
 
@@ -99,13 +104,21 @@
 - 固定輸出 `1Y / 3Y / 5Y` 視窗
 - 已提供 `price / fundamental / quality` factor sleeves
 
+### C / Recommendation Decision Layer
+
+- 每檔 candidate 會輸出 `買入 / 持有 / 賣出`
+- 新增 `risk_score`、`action_view`、`target_range`、`position_note`、`invalidation_conditions`、`evidence_refs`
+- `reports`、`audit`、`watchlist`、`decision-review` 與 SQLite decision ledger 都會保留 recommendation 欄位
+- `--recommendation-mode deterministic` 可獨立運作；`--recommendation-mode llm-review` 可做可選反方檢查與風險補強
+- LLM review 不覆蓋原始分數與資料；若輸出格式錯誤、證據不足或 risk gate 失敗，會回落或降級為 deterministic / 持有
+
 ### Pending
 
 以下部分仍待後續優化：
 
-- `C / Theme Coverage Expansion`
-- `D / Workflow Deepening`
-- `E / Action Engine Upgrade`
+- `D / Theme Coverage Expansion`
+- `E / Workflow Deepening`
+- `F / Action Engine Upgrade` 的事件狀態機仍可再深化
 
 ## Quick Start
 
@@ -123,6 +136,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screene
   --quality-update-mode auto `
   --quality-update-budget-sec 3 `
   --quality-history-depth 8 `
+  --recommendation-mode deterministic `
   --output-format md,json,csv `
   --coverage-list "%USERPROFILE%\tw-reports\coverage-list.txt"
 ```
@@ -139,6 +153,22 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screene
 - `audit/<yyyymmdd>/sector-report-<theme>-<yyyymmdd>.audit.json`
 - `watchlists/<theme>/watchlist-<theme>-<yyyymmdd>.json`
 - `backtests/<theme>/validation-<theme>-<yyyymmdd>.json`
+- `decisions/<theme>/decision-review-<theme>-<yyyymmdd>.json`
+- `decision-ledger.sqlite`
+
+LLM review 範例：
+
+```powershell
+python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
+  --theme AI `
+  --theme-mode strict `
+  --as-of 2026-03-12 `
+  --top-n 8 `
+  --recommendation-mode llm-review `
+  --review-top-n 8 `
+  --llm-provider openai `
+  --llm-model gpt-4o-mini
+```
 
 全類股 Top100 批次快照：
 
@@ -188,6 +218,8 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\backfill_quarterl
 - `--quality-history-depth`: history coverage 目標季數
 - `--recommendation-mode`: `deterministic` / `llm-review` / `off`
 - `--review-top-n`: `llm-review` 模式下標記審查的前 N 檔
+- `--llm-provider`: `openai` / `openrouter` / `local` / `custom`
+- `--llm-model`: LLM review 使用的模型名稱
 - `--decision-ledger`: SQLite 決策紀錄路徑
 - `--no-target-price`: 關閉目標區間推估
 - `--output-root`: 官方輸出根目錄
@@ -214,6 +246,8 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\backfill_quarterl
 - `Factor Coverage / Data Freshness`: 一個看缺值，一個看資料新鮮度
 - `Action View`: `Overweight / Neutral / Underweight`
 - `Recommendation`: `買入 / 持有 / 賣出` 研究建議評估
+- `Risk Score`: 波動、趨勢破壞、估值過熱、資料缺口與 risk gate 的綜合風險
+- `Evidence Refs`: recommendation 使用到的結構化證據路徑
 - `Why Now / Why Not`: 現在能看與需要保守的理由
 - `Add Trigger / Trim Trigger`: 加碼與減碼條件
 - `Decision Ledger`: 記錄每次建議、信心、風險、失效條件與 evidence refs
@@ -256,17 +290,21 @@ tw-sector-screener/
 目前 repo 的最低交付標準：
 
 - `python -m unittest discover -s tests` 必須通過
+- recommendation 相關變更需保留 deterministic mode 可獨立運作
+- LLM review 失敗時 CLI 不應失敗，報告需回落 deterministic recommendation
 - `tw-sector-screener-output/` 不進 git
 - repo 內只保留人工挑選的 sample reports
 - 影響報告契約的變更，需同步更新 sample reports
 
 ## Current Limits
 
-目前仍有三個明顯限制：
+目前仍有幾個明顯限制：
 
 - 季度品質資料前期覆蓋仍薄
 - validation 雖已升級，基本面與品質因子仍偏快照型
 - `AI strict` 題材池純度高，coverage 仍偏窄
+- LLM review 是可選研究層，不是資料源；沒有 evidence refs 的主張不應升級 recommendation
+- target range 會在資料不足時輸出 `null`，不硬編目標價
 
 因此，這個工具適合做研究前端漏斗，離完整機構研究平台還有一段路。
 
@@ -274,9 +312,9 @@ tw-sector-screener/
 
 下一階段優先順序如下：
 
-1. `C / Theme Coverage Expansion`
-2. `D / Workflow Deepening`
-3. `E / Action Engine Upgrade`
+1. `D / Theme Coverage Expansion`
+2. `E / Workflow Deepening`
+3. `F / Action Engine Upgrade`
 
 詳見 [docs/optimization-roadmap-v2.md](./docs/optimization-roadmap-v2.md)。
 
