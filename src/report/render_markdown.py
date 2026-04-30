@@ -81,10 +81,13 @@ def render_report(context: dict[str, Any]) -> str:
     if sector:
         weights = sector.get("weights") or {}
         quality = sector.get("quality_coverage_summary") or {}
+        rec_dist = sector.get("recommendation_distribution") or {}
+        rec_text = "、".join(f"{key} {value}" for key, value in rec_dist.items()) if rec_dist else "N/A"
         weight_text = "、".join(f"{k} {int(float(v) * 100)}%" for k, v in weights.items()) if weights else "N/A"
         sector_lines = "\n".join(
             [
                 f"- 評分母體 `{sector.get('universe_count', 'N/A')}` 檔，Top{sector.get('top_n', 'N/A')} 平均 idea score `{_fmt(sector.get('top_avg_idea'))}` / 平均 confidence `{_fmt(sector.get('top_avg_confidence'))}`",
+                f"- 建議評估分布：{rec_text}",
                 f"- 因子權重：{weight_text}",
                 f"- Benchmark 視角：20D 題材平均 `{_fmt(sector.get('avg_ret_20d'))}`%，相對大盤 `{_fmt(sector.get('avg_rel_to_taiex_20d'))}`%",
                 f"- Quality coverage：當期完整 `{_fmt(quality.get('current_complete_pct'))}`%，前期完整 `{_fmt(quality.get('previous_complete_pct'))}`%",
@@ -99,12 +102,14 @@ def render_report(context: dict[str, Any]) -> str:
         action_view = item.get("action_view") or {}
         benchmark_view = item.get("benchmark_view") or {}
         rows.append(
-            "| {rank} | {symbol} | {name} | {idea} | {conf} | {action} | {thesis} | {why_now} | {why_not} |".format(
+            "| {rank} | {symbol} | {name} | {idea} | {conf} | {risk} | {rec} | {action} | {thesis} | {why_now} | {why_not} |".format(
                 rank=item.get("rank", "-"),
                 symbol=item.get("symbol", "-"),
                 name=item.get("name", "-"),
                 idea=_fmt(item.get("idea_score")),
                 conf=_fmt(item.get("confidence_score")),
+                risk=_fmt(item.get("risk_score")),
+                rec=item.get("recommendation") or "-",
                 action=action_view.get("action", "-"),
                 thesis=item.get("thesis_summary") or "-",
                 why_now=" / ".join(action_view.get("why_now", [])) or "-",
@@ -114,9 +119,11 @@ def render_report(context: dict[str, Any]) -> str:
         action_lines.append(
             "\n".join(
                 [
-                    f"- `{item.get('symbol')}` {item.get('name')}：`{action_view.get('action', '-')}`，進場區間 `{_fmt((action_view.get('entry_range') or ['N/A'])[0])}` ~ `{_fmt((action_view.get('entry_range') or ['N/A', 'N/A'])[1])}`",
+                    f"- `{item.get('symbol')}` {item.get('name')}：`{item.get('recommendation', '-')}` / `{action_view.get('action', '-')}`，研究動作 `{item.get('research_action_view', '-')}`，進場區間 `{_fmt((action_view.get('entry_range') or ['N/A'])[0])}` ~ `{_fmt((action_view.get('entry_range') or ['N/A', 'N/A'])[1])}`",
+                    f"  target：{_fmt((item.get('target_range') or {}).get('low'))} / {_fmt((item.get('target_range') or {}).get('base'))} / {_fmt((item.get('target_range') or {}).get('high'))}",
                     f"  add trigger：{action_view.get('add_trigger') or 'N/A'}",
                     f"  trim trigger：{action_view.get('trim_trigger') or 'N/A'}",
+                    f"  invalidation：{' / '.join(item.get('invalidation_conditions') or []) or 'N/A'}",
                     f"  data flags：{' / '.join(item.get('data_quality_flags') or []) or 'clean'}",
                 ]
             )
@@ -137,7 +144,7 @@ def render_report(context: dict[str, Any]) -> str:
                 )
             )
 
-    table_body = "\n".join(rows) or "| - | - | - | - | - | - | - | - | - |"
+    table_body = "\n".join(rows) or "| - | - | - | - | - | - | - | - | - | - | - |"
     action_body = "\n".join(action_lines) or "- N/A"
     trend_body = "\n".join(trend_rows) or "| - | - | - | - | - | - | - | - | - |"
 
@@ -159,8 +166,8 @@ def render_report(context: dict[str, Any]) -> str:
 {method_lines}
 
 ## 候選清單
-| 排名 | 代碼 | 名稱 | Idea Score | Confidence | Action | Thesis Summary | Why Now | Why Not |
-|---:|---|---|---:|---:|---|---|---|---|
+| 排名 | 代碼 | 名稱 | Idea Score | Confidence | Risk | 建議 | Action | Thesis Summary | Why Now | Why Not |
+|---:|---|---|---:|---:|---:|---|---|---|---|---|
 {table_body}
 
 ## 前 {len(picks)} 名個股趨勢（Top {len(picks)}）

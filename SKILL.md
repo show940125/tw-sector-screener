@@ -6,6 +6,7 @@ description: Use when screening Taiwan sector/theme stocks and producing researc
 # TW Sector Screener
 
 用免費資料源做台股題材/類股研究初篩，輸出可追溯的 `idea ranking + action view`，而不是把一個分數硬扮成投資決策。
+現在每檔候選會另外輸出 `買入 / 持有 / 賣出` 研究建議評估；排名仍是研究優先序，建議評估用於後續動作與風險控管。
 
 ## Use This Skill
 
@@ -43,6 +44,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screene
   --quality-update-mode auto `
   --quality-update-budget-sec 3 `
   --quality-history-depth 8 `
+  --recommendation-mode deterministic `
   --output-format md,json,csv `
   --coverage-list "%USERPROFILE%\tw-reports\coverage-list.txt" `
   --output-root "%USERPROFILE%\tw-sector-screener-output"
@@ -95,6 +97,11 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_univers
 - `--quality-update-mode`
 - `--quality-update-budget-sec`
 - `--quality-history-depth`
+- `--recommendation-mode`：`deterministic | llm-review | off`
+- `--review-top-n`：`llm-review` metadata 標記前 N 檔
+- `--llm-provider` / `--llm-model`：預留給 deep review metadata；目前失敗會回落 deterministic review
+- `--decision-ledger`：SQLite 決策紀錄路徑
+- `--no-target-price`：關閉目標區間推估
 - `--top-n`
 - `--universe-limit`
 - `--min-monthly-revenue`
@@ -110,6 +117,8 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_univers
 - `audit/<yyyymmdd>/sector-report-<theme>-<yyyymmdd>.audit.json`
 - `watchlists/<theme>/watchlist-<theme>-<yyyymmdd>.json`
 - `backtests/<theme>/validation-<theme>-<yyyymmdd>.json`
+- `decisions/<theme>/decision-review-<theme>-<yyyymmdd>.json`
+- `decisions/decision-ledger.sqlite`
 
 報告至少要能回答：
 - 哪些標的應先研究
@@ -118,6 +127,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_univers
 - 為什麼不能太衝
 - 何時加碼
 - 何時減碼
+- 現在每檔是 `買入 / 持有 / 賣出` 哪一種研究建議評估
 
 ## Notes
 
@@ -126,5 +136,6 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_univers
 - `confidence_score` 現在拆成 `factor_coverage_confidence` 與 `data_freshness_confidence`。
 - `quality_score` 目前採官方最新季抓取 + SQLite append-only 歷史累積。
 - `idea score` 是研究優先序；`action view` 才是部位動作。
+- `recommendation` 是研究建議評估；LLM review 不改 deterministic ranking。
 - repo 以 `Feature Branch + PR` 維護，分支名稱固定使用 `codex/` 前綴。
 - 官方執行輸出固定放在 `%USERPROFILE%\tw-sector-screener-output`，不進 git；repo 內只保留 `examples/sample-reports/` 樣本。

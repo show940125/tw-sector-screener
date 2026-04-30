@@ -188,6 +188,7 @@ class CliOutputTests(unittest.TestCase):
             self.assertTrue(outputs["audit"].exists())
             self.assertTrue(outputs["watchlist"].exists())
             self.assertTrue(outputs["backtest"].exists())
+            self.assertTrue(outputs["decisions"].exists())
             self.assertEqual(outputs["md"].parent, output_dir / "reports" / "20260312" / "AI")
             self.assertEqual(outputs["audit"].parent, output_dir / "audit" / "20260312")
             self.assertEqual(outputs["watchlist"].parent, output_dir / "watchlists" / "AI")
@@ -197,6 +198,9 @@ class CliOutputTests(unittest.TestCase):
             self.assertIn("picks", payload)
             self.assertIn("audit", payload)
             self.assertIn("action_view", payload["picks"][0])
+            self.assertIn("recommendation", payload["picks"][0])
+            self.assertIn("risk_score", payload["picks"][0])
+            self.assertIn("recommendation_detail", payload["picks"][0])
             self.assertIn("confidence_score", payload["picks"][0])
             self.assertIn("quality_data_source", payload["picks"][0])
             self.assertIn("quality_periods_used", payload["picks"][0])
@@ -208,6 +212,8 @@ class CliOutputTests(unittest.TestCase):
             audit = json.loads(outputs["audit"].read_text(encoding="utf-8"))
             self.assertEqual(audit["output_root"], str(output_dir))
             self.assertIn("backtest_config", audit)
+            self.assertIn("recommendation_policy_version", audit)
+            self.assertIn("recommendation_distribution", audit)
             self.assertIn("quality_coverage_summary", audit)
             self.assertIn("quarterly_store_path", audit)
             self.assertEqual(audit["quality_period_requirement"], 2)
@@ -219,6 +225,9 @@ class CliOutputTests(unittest.TestCase):
             watchlist = json.loads(outputs["watchlist"].read_text(encoding="utf-8"))
             self.assertIn("rating_change_reason", watchlist["rows"][0])
             self.assertIn("event_risk_state", watchlist["rows"][0])
+            self.assertIn("recommendation", watchlist["rows"][0])
+            self.assertIn("recommendation_delta", watchlist["rows"][0])
+            self.assertIn("action_required", watchlist["rows"][0])
 
     def test_run_supports_skip_update_mode_without_enqueue(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

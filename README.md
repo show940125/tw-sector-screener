@@ -42,9 +42,10 @@
 
 - 題材池管理：支援 `strict` / `broad`，並提供 curated theme library
 - 研究排序：輸出 `idea_score`
-- 可解釋動作：輸出 `Overweight / Neutral / Underweight`、`why_now`、`why_not`、`add_trigger`、`trim_trigger`
+- 可解釋動作：輸出 `買入 / 持有 / 賣出` 研究建議評估，以及 `Overweight / Neutral / Underweight`、`why_now`、`why_not`、`add_trigger`、`trim_trigger`
 - 結構化輸出：同時產生 `Markdown / JSON / CSV`
 - 工作流支援：提供 `watchlist`、`audit trail`、`validation report`
+- 決策紀錄：輸出 `decision-review` JSON 與 SQLite decision ledger
 - 資料品質揭露：拆分 `factor_coverage_confidence` 與 `data_freshness_confidence`
 - 本地快取：降低 TWSE / TPEx 重複抓取成本
 
@@ -185,6 +186,10 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\backfill_quarterl
 - `--quality-update-mode`: `auto` / `skip` / `force`
 - `--quality-update-budget-sec`: 前台更新檢查延遲預算
 - `--quality-history-depth`: history coverage 目標季數
+- `--recommendation-mode`: `deterministic` / `llm-review` / `off`
+- `--review-top-n`: `llm-review` 模式下標記審查的前 N 檔
+- `--decision-ledger`: SQLite 決策紀錄路徑
+- `--no-target-price`: 關閉目標區間推估
 - `--output-root`: 官方輸出根目錄
 - `--output-dir`: deprecated alias，保留相容
 
@@ -208,8 +213,10 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\backfill_quarterl
 - `Confidence`: 結論可靠度
 - `Factor Coverage / Data Freshness`: 一個看缺值，一個看資料新鮮度
 - `Action View`: `Overweight / Neutral / Underweight`
+- `Recommendation`: `買入 / 持有 / 賣出` 研究建議評估
 - `Why Now / Why Not`: 現在能看與需要保守的理由
 - `Add Trigger / Trim Trigger`: 加碼與減碼條件
+- `Decision Ledger`: 記錄每次建議、信心、風險、失效條件與 evidence refs
 - `Validation`: 目前排序框架的驗證結果
 - `Audit`: 本次參數、資料來源、警示與快取路徑
 - `History Coverage`: 近 8 季完整覆蓋程度
