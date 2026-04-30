@@ -16,9 +16,12 @@ if str(ROOT_DIR) not in sys.path:
 from src.analysis.actions import build_action_view
 from src.analysis.backtest import run_cross_sectional_backtest
 from src.analysis.factors import atr_wilder, momentum_return, percentile_rank, rsi_wilder, sma, trend_score, volatility_annualized
+from src.analysis.llm_review import apply_llm_review
+from src.analysis.recommendation import build_sector_recommendation
 from src.analysis.scoring import score_candidates
 from src.config import load_config
 from src.providers.tw_market_provider import TwMarketProvider
+from src.report.decision_ledger import write_decision
 from src.report.export_structured import write_audit_trail, write_candidate_csv, write_json_report, write_watchlist
 from src.report.render_markdown import build_report_filename, render_report
 
@@ -46,6 +49,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--quality-update-mode", choices=["auto", "skip", "force"], default="auto", help="季度資料更新檢查模式")
     parser.add_argument("--quality-update-budget-sec", type=float, default=3.0, help="前台品質更新檢查的延遲預算")
     parser.add_argument("--quality-history-depth", type=int, default=8, help="品質歷史覆蓋目標季數")
+    parser.add_argument("--recommendation-mode", choices=["deterministic", "llm-review", "off"], default="deterministic", help="建議評估模式")
+    parser.add_argument("--llm-provider", default=None, help="預留 LLM provider 設定；目前只寫入 audit metadata")
+    parser.add_argument("--llm-model", default=None, help="預留 LLM model 設定；目前只寫入 audit metadata")
+    parser.add_argument("--review-top-n", type=int, default=8, help="llm-review 模式下標記審查的前 N 檔")
+    parser.add_argument("--decision-ledger", default=None, help="SQLite 決策紀錄路徑")
+    parser.add_argument("--no-target-price", action="store_true", help="關閉 target_range 推估")
     return parser.parse_args()
 
 
@@ -210,9 +219,38 @@ def _event_risk_state(row: dict[str, Any]) -> str:
     flags = row.get("data_quality_flags") or []
     if "quality:fetch_failed" in flags or (row.get("volatility20") or 0.0) >= 45:
         return "elevated"
-    if action_view.get("action") == "Overweight":
+    if action_view.get("action") == "Overweight" or row.get("recommendation") == "買入":
         return "manageable"
     return "normal"
+
+
+def _recommendation_delta(previous: str | None, current: str | None) -> str | None:
+    if previous is None and current is None:
+        return None
+    if previous is None:
+        return "new"
+    if current is None:
+        return "dropped"
+    order = {"賣出": 0, "持有": 1, "買入": 2}
+    prev_value = order.get(previous, 1)
+    curr_value = order.get(current, 1)
+    if curr_value > prev_value:
+        return "upgrade"
+    if curr_value < prev_value:
+        return "downgrade"
+    return "unchanged"
+
+
+def _action_required(row: dict[str, Any] | None, previous_recommendation: str | None) -> str:
+    if not row:
+        return "移出或降為觀察"
+    recommendation = row.get("recommendation")
+    delta = _recommendation_delta(previous_recommendation, recommendation)
+    if recommendation == "買入":
+        return "排入深入研究與分批計畫" if delta != "unchanged" else "維持買入研究節奏"
+    if recommendation == "賣出":
+        return "檢查既有部位並降風險"
+    return "續抱觀察，等待升級條件"
 
 
 def _build_watchlist_payload(
@@ -224,12 +262,15 @@ def _build_watchlist_payload(
 ) -> dict[str, Any]:
     current_map = {row["symbol"]: row for row in ranked}
     previous_ranks = {item["symbol"]: item.get("rank") for item in previous_payload.get("rows", [])}
+    previous_recommendations = {item["symbol"]: item.get("recommendation") for item in previous_payload.get("rows", [])}
     target_symbols = coverage_symbols or [row["symbol"] for row in ranked[:10]]
     rows: list[dict[str, Any]] = []
     for symbol in target_symbols:
         row = current_map.get(symbol)
         current_rank = row.get("rank") if row else None
         previous_rank = previous_ranks.get(symbol)
+        previous_recommendation = previous_recommendations.get(symbol)
+        current_recommendation = row.get("recommendation") if row else None
         rating_change_reason = "新納入觀察"
         if previous_rank is not None and current_rank is not None:
             delta = previous_rank - current_rank
@@ -261,6 +302,11 @@ def _build_watchlist_payload(
                 "rating_change_reason": rating_change_reason,
                 "event_risk_state": _event_risk_state(row or {}),
                 "action": ((row or {}).get("action_view") or {}).get("action"),
+                "recommendation": current_recommendation,
+                "previous_recommendation": previous_recommendation,
+                "recommendation_delta": _recommendation_delta(previous_recommendation, current_recommendation),
+                "delta_reason": (row or {}).get("recommendation_reason") or rating_change_reason,
+                "action_required": _action_required(row, previous_recommendation),
                 "thesis_summary": (row or {}).get("thesis_summary"),
             }
         )
@@ -420,6 +466,12 @@ def run(
     quality_update_mode: str = "auto",
     quality_update_budget_sec: float = 3.0,
     quality_history_depth: int = 8,
+    recommendation_mode: str = "deterministic",
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    review_top_n: int = 8,
+    decision_ledger: Path | None = None,
+    no_target_price: bool = False,
 ) -> dict[str, Path]:
     config = load_config(config_path)
     output_formats = output_formats or {"md", "json", "csv"}
@@ -682,6 +734,7 @@ def run(
     ranked = score_candidates(scored_input, weights=weights)
     for idx, row in enumerate(ranked, start=1):
         row["rank"] = idx
+        row["as_of"] = as_of.isoformat()
         row["action_view"] = build_action_view(
             idea_score=float(row.get("idea_score") or 0.0),
             confidence_score=float(row.get("confidence_score") or 0.0),
@@ -701,6 +754,82 @@ def run(
             "rel_to_sector_20d": row.get("rel_to_sector_20d"),
             "rel_to_industry_20d": row.get("rel_to_industry_20d"),
         }
+        if recommendation_mode != "off":
+            source = "deterministic_plus_llm" if recommendation_mode == "llm-review" and idx <= review_top_n else "deterministic"
+            recommendation = build_sector_recommendation(
+                row,
+                recommendation_source=source,
+                no_target_price=no_target_price,
+            )
+            recommendation.update(
+                {
+                    "theme": theme,
+                    "name": row.get("name"),
+                    "idea_score": row.get("idea_score"),
+                    "rank_score": row.get("rank_score"),
+                    "close_price": row.get("close"),
+                    "llm_review": {
+                        "enabled": recommendation_mode == "llm-review" and idx <= review_top_n,
+                        "provider": llm_provider,
+                        "model": llm_model,
+                        "status": "not-requested" if recommendation_mode != "llm-review" or idx > review_top_n else "pending",
+                    },
+                }
+            )
+            if recommendation_mode == "llm-review" and idx <= review_top_n:
+                recommendation = apply_llm_review(
+                    recommendation,
+                    {
+                        "theme": theme,
+                        "symbol": row.get("symbol"),
+                        "name": row.get("name"),
+                        "as_of": as_of.isoformat(),
+                        "scores": {
+                            "idea_score": row.get("idea_score"),
+                            "rank_score": row.get("rank_score"),
+                            "confidence_score": row.get("confidence_score"),
+                            "trend_score": row.get("trend_score"),
+                            "momentum_score": row.get("momentum_score"),
+                            "value_score": row.get("value_score"),
+                            "fundamental_score": row.get("fundamental_score"),
+                            "quality_score": row.get("quality_score"),
+                            "benchmark_score": row.get("benchmark_score"),
+                            "risk_control_score": row.get("risk_control_score"),
+                        },
+                        "technical": {
+                            "close": row.get("close"),
+                            "sma20": row.get("sma20"),
+                            "sma60": row.get("sma60"),
+                            "sma120": row.get("sma120"),
+                            "rsi14": row.get("rsi14"),
+                            "atr14": row.get("atr14"),
+                            "volatility20": row.get("volatility20"),
+                        },
+                        "valuation": {"pe": row.get("pe"), "pb": row.get("pb"), "dividend_yield": row.get("dividend_yield")},
+                        "quality": {
+                            "quality_fetch_status": row.get("quality_fetch_status"),
+                            "quality_missing_reason": row.get("quality_missing_reason"),
+                            "data_quality_flags": row.get("data_quality_flags"),
+                        },
+                        "benchmark_view": row.get("benchmark_view"),
+                    },
+                    provider=llm_provider,
+                    model=llm_model,
+                )
+            row["recommendation_detail"] = recommendation
+            row["recommendation"] = recommendation["recommendation"]
+            row["risk_score"] = recommendation["risk_score"]
+            row["research_action_view"] = recommendation["action_view"]
+            row["target_range"] = recommendation["target_range"]
+            row["position_note"] = recommendation["position_note"]
+            row["invalidation_conditions"] = recommendation["invalidation_conditions"]
+            row["upgrade_conditions"] = recommendation["upgrade_conditions"]
+            row["review_notes"] = recommendation["review_notes"]
+            row["recommendation_reason"] = recommendation["review_notes"].get("manager_decision")
+            row["action_view"]["recommendation"] = recommendation["recommendation"]
+            row["action_view"]["research_action"] = recommendation["action_view"]
+            row["action_view"]["risk_score"] = recommendation["risk_score"]
+            row["action_view"]["invalidation_conditions"] = recommendation["invalidation_conditions"]
 
     picks: list[dict[str, Any]] = []
     for row in ranked[:top_n]:
@@ -722,6 +851,15 @@ def run(
         )
 
     top_rows = ranked[:top_n]
+    recommendation_distribution: dict[str, int] = {}
+    for row in top_rows:
+        rec = str(row.get("recommendation") or "N/A")
+        recommendation_distribution[rec] = recommendation_distribution.get(rec, 0) + 1
+    high_risk_candidates = [
+        {"symbol": row.get("symbol"), "name": row.get("name"), "risk_score": row.get("risk_score")}
+        for row in top_rows
+        if isinstance(row.get("risk_score"), (int, float)) and float(row.get("risk_score")) >= 65.0
+    ]
     quality_coverage_summary = provider.summarize_quality_coverage(
         ranked,
         top_n=min(3, top_n),
@@ -738,6 +876,13 @@ def run(
         "weights": weights,
         "quality_coverage_summary": quality_coverage_summary,
         "history_depth_target": quality_history_depth,
+        "recommendation_distribution": recommendation_distribution,
+        "strongest_buy_candidates": [
+            {"symbol": row.get("symbol"), "name": row.get("name"), "idea_score": row.get("idea_score")}
+            for row in top_rows
+            if row.get("recommendation") == "買入"
+        ],
+        "high_risk_candidates": high_risk_candidates,
     }
 
     validation_summary: dict[str, Any] = {"mode": "not-run", "window": validation_window, "rebalance": rebalance, "cost_bps": cost_bps}
@@ -753,7 +898,7 @@ def run(
         f" Evidence：相對題材 20 日超額 `{((top_pick.get('benchmark_view') or {}).get('rel_to_sector_20d') or 0.0):.2f}%`，"
         f"confidence `{top_pick.get('confidence_score', 0.0):.1f}`。"
         f" Risk：{'；'.join(top_pick.get('data_quality_flags') or ['主要風險在題材回檔'])}。"
-        f" Action：`{(top_pick.get('action_view') or {}).get('action', 'Neutral')}`。"
+        f" Action：`{(top_pick.get('action_view') or {}).get('action', 'Neutral')}`；建議評估 `{top_pick.get('recommendation', 'N/A')}`。"
         f" What changes my mind：若相對題材 20 日動能轉負、confidence 下滑或法說/營收驗證失敗，就降級。"
     )
 
@@ -803,6 +948,16 @@ def run(
         "provider_versions": {"market_provider": "twse_openapi+tpex_openapi", "validation_engine": "factor_aware_cross_sectional_v2"},
         "quality_coverage_summary": quality_coverage_summary,
         "backtest_config": {"enabled": run_backtest, "window": validation_window, "rebalance": rebalance, "cost_bps": cost_bps},
+        "recommendation_policy_version": "tw-recommendation-v1",
+        "recommendation_mode": recommendation_mode,
+        "llm_review": {
+            "enabled": recommendation_mode == "llm-review",
+            "provider": llm_provider,
+            "model": llm_model,
+            "review_top_n": review_top_n,
+            "status": "deterministic-review-fallback",
+        },
+        "recommendation_distribution": recommendation_distribution,
         "universe_count": len(universe),
         "ranked_count": len(ranked),
     }
@@ -843,6 +998,19 @@ def run(
                 "audit": audit_payload,
             },
         )
+    decisions_payload = {
+        "theme": theme,
+        "as_of": as_of.isoformat(),
+        "recommendation_mode": recommendation_mode,
+        "rows": [pick.get("recommendation_detail") for pick in picks if pick.get("recommendation_detail")],
+    }
+    decisions_dir = resolved_output_root / "decisions" / theme
+    outputs["decisions"] = write_json_report(decisions_dir / f"decision-review-{theme}-{date_tag}.json", decisions_payload)
+    if recommendation_mode != "off":
+        ledger_path = decision_ledger or (resolved_output_root / "decisions" / "decision-ledger.sqlite")
+        for item in decisions_payload["rows"]:
+            if isinstance(item, dict):
+                write_decision(ledger_path, "tw-sector-screener", item, theme=theme)
     if "csv" in output_formats:
         outputs["csv"] = write_candidate_csv(reports_dir / f"{stem}.csv", picks)
 
@@ -882,6 +1050,12 @@ def main() -> int:
             quality_update_mode=args.quality_update_mode,
             quality_update_budget_sec=args.quality_update_budget_sec,
             quality_history_depth=args.quality_history_depth,
+            recommendation_mode=args.recommendation_mode,
+            llm_provider=args.llm_provider,
+            llm_model=args.llm_model,
+            review_top_n=args.review_top_n,
+            decision_ledger=Path(args.decision_ledger) if args.decision_ledger else None,
+            no_target_price=args.no_target_price,
         )
         for key, path in outputs.items():
             print(f"[tw-sector-screener] {key}: {path}")
