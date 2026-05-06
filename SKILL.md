@@ -5,15 +5,15 @@ description: Use when screening Taiwan sector/theme stocks and producing researc
 
 # TW Sector Screener
 
-用免費資料源做台股題材/類股研究初篩，輸出可追溯的 `idea ranking + action view`，而不是把一個分數硬扮成投資決策。
-現在每檔候選會另外輸出 `買入 / 持有 / 賣出` 研究建議評估；排名仍是研究優先序，建議評估用於後續動作與風險控管。
+用免費資料源做台股題材/類股研究初篩，輸出可追溯的 `buying ranking + actionable queue + watchlist + research list + action view`，而不是把一個分數硬扮成投資決策。
+現在每檔候選會另外輸出 `買入 / 持有 / 賣出` 研究建議評估；買進榜與研究榜拆開，避免把研究優先序誤讀成買進優先序。
 
 ## Use This Skill
 
 適用：
 - 想看整個題材或子題材哪些股票值得先研究
 - 需要 `Markdown + JSON + CSV + audit trail + watchlist`
-- 需要把研究排序遷入日常 coverage / rerank 流程
+- 需要把買進排序、可行動候選、追蹤清單、研究排序遷入日常 coverage / rerank 流程
 
 不適用：
 - 即時下單或自動交易
@@ -28,18 +28,22 @@ description: Use when screening Taiwan sector/theme stocks and producing researc
 
 目前進度：
 - `A / Data Quality Hardening`：已建立 SQLite 季度資料層，並補季度刷新、歷史回補與 quality coverage summary
-- `B / Validation V2`：已升級 factor-aware validation
-- `C / D / E`：仍待後續優化
+- `B / Validation V3`：已升級 factor-aware validation，並加入 portfolio diagnostics
+- `C / Three-List Output`：已拆出 buying ranking、watchlist 與 research list
+- `D / Theme Coverage Expansion`：`AI` / `半導體` 預設使用 `coverage` universe；`core` 僅作高純度追蹤池
+- `E / Actionable Queue`：已補決策梯度，讓 `buying_ranking = 0` 時仍能回答下一步動作
+- `F / Stock Risk Metrics`：已加入單股 Sharpe / Sortino / drawdown / volatility 與 risk-adjusted score，輔助買進排序與 simulator analysis
+- `G / Buying Gate V2`：已把買進榜拆成 `formal_buy`、`risk_adjusted_buy`、`tactical_buy`，讓低風險高 RiskAdj 標的不再被單一 idea 門檻排除
 
 ## Command
 
 ```powershell
 python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screener.py" `
   --theme AI `
-  --theme-mode strict `
+  --universe-mode coverage `
   --benchmark TAIEX `
   --as-of 2026-04-29 `
-  --top-n 8 `
+  --top-n 20 `
   --run-backtest `
   --quality-update-mode auto `
   --quality-update-budget-sec 3 `
@@ -82,10 +86,42 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_univers
   --output-dir "%USERPROFILE%\tw-sector-screener-output"
 ```
 
+投資模擬器：
+
+```powershell
+python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investment_simulator.py" `
+  --themes AI,半導體 `
+  --universe-mode coverage `
+  --start-date 2026-04-01 `
+  --end-date 2026-04-29 `
+  --initial-cash 1000000 `
+  --top-n 20 `
+  --recommendation-mode deterministic `
+  --analysis-cache reuse `
+  --output-root "%USERPROFILE%\tw-sector-screener-output"
+```
+
+每日自動化模式：
+
+```powershell
+python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investment_simulator.py" `
+  --mode daily `
+  --themes AI,半導體 `
+  --universe-mode coverage `
+  --as-of today `
+  --initial-cash 1000000 `
+  --top-n 20 `
+  --recommendation-mode deterministic `
+  --analysis-cache reuse `
+  --config "%USERPROFILE%\.codex\skills\tw-sector-screener\simulator.config.example.json" `
+  --output-root "%USERPROFILE%\tw-sector-screener-output"
+```
+
 ## Parameters
 
 - `--theme`：類股/主題
-- `--theme-mode`：`strict` / `broad`
+- `--universe-mode`：`core` / `coverage` / `broad`，預設 `coverage`
+- `--theme-mode`：deprecated legacy option；`strict` 會映射到 `core`，同時指定時以 `--universe-mode` 為準
 - `--benchmark`：`TAIEX` / `sector` / `custom`
 - `--output-format`：`md,json,csv`
 - `--config`：JSON / YAML config
@@ -109,6 +145,15 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_univers
 - `--output-root`
 - `--output-dir`（deprecated）
 
+投資模擬器參數：
+- `--mode`：`historical | daily | historical-plus-daily`
+- `--themes`：預設 `AI,半導體`
+- `--universe-mode`：`core | coverage | broad`，預設 `coverage`
+- `--as-of`：可用 `YYYY-MM-DD` 或 `today`
+- `--initial-cash`：每個 portfolio 初始資金
+- `--analysis-cache`：`reuse | refresh`
+- `--config`：交易成本與 `lot_size` 設定；預設 `lot_size=1` 表示零股模式
+
 ## Output Contract
 
 - `reports/<yyyymmdd>/<theme>/sector-report-<theme>-<yyyymmdd>.md`
@@ -119,9 +164,29 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_univers
 - `backtests/<theme>/validation-<theme>-<yyyymmdd>.json`
 - `decisions/<theme>/decision-review-<theme>-<yyyymmdd>.json`
 - `decisions/decision-ledger.sqlite`
+- `simulations/<run_id>/simulator.sqlite`
+- `simulations/<run_id>/dashboard.html`
+- `simulations/<run_id>/summary.json`
+- `simulations/<run_id>/daily-equity.csv`
+
+Validation v3 contract：
+- `validation_summary.mode = validation_report_v3`
+- `metrics.portfolio_diagnostics` 包含 VaR / CVaR / Ulcer / Omega / Tail Ratio / rolling metrics / alpha-beta attribution
+- `audit.connector_contract_version` 與 `audit.supplementary_connectors` 會揭露補充資料來源
+- `reports` JSON 固定包含 `buying_ranking`、`actionable_queue`、`watchlist_candidates`、`research_list`、`picks`
+- `reports` JSON 固定包含 `universe_overview`；候選標的會揭露 `theme_buckets`、`primary_bucket`、`coverage_reason` 與 `core_watchlist_member`
+- 候選標的固定揭露 `decision_tier`、`actionability_score`、`blocked_by`、`next_action`、`trigger_to_upgrade` 與 `why_not_buy_now`
+- 候選標的固定揭露 `stock_risk_metrics` 與 `risk_adjusted_score`
+- `picks` 保留為 research top N alias，讓 simulator 不漏掉賣出/降風險訊號
+- `audit.ranking_policy_version = tw-three-list-v1`
+- `audit.action_queue_policy_version = tw-actionable-queue-v1`
+- `audit.stock_risk_metrics_version = stock-risk-v1`
 
 報告至少要能回答：
 - 哪些標的應先研究
+- 哪些標的現在可買
+- 若現在沒有正式買進，下一步最接近能做的是什麼
+- 哪些標的需要追蹤、持有管理或降風險
 - 結論可信度有多高
 - 為什麼現在能看
 - 為什麼不能太衝
@@ -131,11 +196,15 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_univers
 
 ## Notes
 
-- 預設用 `strict` 題材池，避免 AI 題材被 telecom / panel 類 proxy 污染。
+- 預設用 `coverage` universe 做正式選股；`core` 是高純度追蹤池，`broad` 才做探索式關鍵字擴張。
 - 缺值會直接反映在 `confidence_score` 與 `data_quality_flags`，不再默默補中性分。
 - `confidence_score` 現在拆成 `factor_coverage_confidence` 與 `data_freshness_confidence`。
 - `quality_score` 目前採官方最新季抓取 + SQLite append-only 歷史累積。
 - `idea score` 是研究優先序；`action view` 才是部位動作。
+- `buyability_score` 是買進優先序；`buying_tier` 是買進資格分層；`idea_score` 是研究優先序。
+- `actionability_score` 是「非正式買進但可行動程度」；它只進 actionable queue，不會把標的升級為正式買進。
+- `risk_adjusted_score` 來自單股 Sharpe / Sortino / drawdown / volatility，只輔助買進排序，不覆蓋 `idea_score`。
 - `recommendation` 是研究建議評估；LLM review 不改 deterministic ranking。
+- `macro_regime_overlay` 是 supplementary risk overlay，只能影響 risk/action，不得直接升級 ranking。
 - repo 以 `Feature Branch + PR` 維護，分支名稱固定使用 `codex/` 前綴。
 - 官方執行輸出固定放在 `%USERPROFILE%\tw-sector-screener-output`，不進 git；repo 內只保留 `examples/sample-reports/` 樣本。

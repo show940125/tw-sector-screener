@@ -1,0 +1,6 @@
+{
+  "commission_bps": 14.25,
+  "sell_tax_bps": 30.0,
+  "min_commission": 20.0,
+  "lot_size": 1
+}

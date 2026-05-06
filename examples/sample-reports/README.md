@@ -21,3 +21,20 @@
   - `audit.json`
   - `validation.json`
   - `decision-review.json`
+- `ai-20260430/`
+  - Coverage universe + three-list output sample
+  - `report.md`
+  - `report.json`
+  - `report.csv`
+  - `audit.json`
+  - `validation.json`
+  - `decision-review.json`
+- `ai-20260505/`
+  - Buying Gate V2 + simulator-aligned risk metrics sample
+  - `report.md`
+  - `report.json`
+  - `report.csv`
+  - `audit.json`
+  - `validation.json`
+  - `decision-review.json`
+  - `watchlist.json`

@@ -8,7 +8,7 @@
 ## Current Status
 
 - `Milestone A / P0 Data Quality Hardening`：已建立 SQLite 季度資料層，季度刷新、coverage summary、audit metadata 都已接上；歷史厚度仍需持續累積。
-- `Milestone B / P1 Validation V2`：已升級為 `factor_aware_cross_sectional_v2` 與多視窗 validation。
+- `Milestone B / P1 Validation V3`：已升級為 `validation_report_v3`，保留 factor-aware 多視窗 validation，並加入 portfolio diagnostics。
 - `Milestone C / D / E`：尚未完成，仍屬下一輪優化主體。
 
 ## Milestones
@@ -24,16 +24,18 @@
 - 建議分支：
   - `codex/p0-quarterly-snapshot-coverage`
 
-### Milestone B: P1 / Validation V2
+### Milestone B: P1 / Validation V3
 
 - 目標：
   - 把 validation 從 `price_only_cross_sectional` 升級成 `factor-aware`
   - 固定輸出 `1Y / 3Y / 5Y`
+  - 補 portfolio diagnostics 與 benchmark attribution
 - 驗收：
   - 可拆出價格、基本面、品質訊號的邊際效果
   - validation report 固定輸出超額報酬、回撤、換手、成本後報酬
+  - validation report 固定輸出 VaR/CVaR、Ulcer、Omega、rolling metrics、alpha/beta、IR、tracking error
 - 建議分支：
-  - `codex/p1-factor-aware-validation`
+  - `codex/p1-validation-report-v3`
 
 ### Milestone C: P1 / Theme Coverage Expansion
 
@@ -76,7 +78,7 @@
 - 工作流可近用性上修到 `8.8+`
   - 條件：watchlist 與 audit 可直接支援研究會議比較
 - 機構級研究流程可遷入性上修到 `7.0+`
-  - 條件：形成 `1Y / 3Y / 5Y` 一致驗證框架與穩定 theme coverage
+  - 條件：形成 `1Y / 3Y / 5Y` 一致驗證框架、portfolio diagnostics 與穩定 theme coverage
 
 ## Repo Operating Rules
 

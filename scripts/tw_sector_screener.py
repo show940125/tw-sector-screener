@@ -15,27 +15,32 @@ if str(ROOT_DIR) not in sys.path:
 
 from src.analysis.actions import build_action_view
 from src.analysis.backtest import run_cross_sectional_backtest
+from src.analysis.candidate_lists import build_candidate_lists
 from src.analysis.factors import atr_wilder, momentum_return, percentile_rank, rsi_wilder, sma, trend_score, volatility_annualized
 from src.analysis.llm_review import apply_llm_review
 from src.analysis.recommendation import build_sector_recommendation
 from src.analysis.scoring import score_candidates
+from src.analysis.stock_risk_metrics import calculate_stock_risk_metrics
 from src.config import load_config
+from src.connectors.contract import build_local_macro_overlay
 from src.providers.tw_market_provider import TwMarketProvider
 from src.report.decision_ledger import write_decision
 from src.report.export_structured import write_audit_trail, write_candidate_csv, write_json_report, write_watchlist
 from src.report.render_markdown import build_report_filename, render_report
+from src.themes import theme_rule
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="台股類股選股 Skill CLI")
     parser.add_argument("--theme", required=True, help="類股主題，例如 半導體 / AI / memory")
     parser.add_argument("--as-of", default=date.today().isoformat(), help="分析截止日 (YYYY-MM-DD)")
-    parser.add_argument("--top-n", type=int, default=10, help="輸出前 N 檔")
+    parser.add_argument("--top-n", type=int, default=20, help="各清單輸出前 N 檔")
     parser.add_argument("--universe-limit", type=int, default=60, help="最多分析多少檔候選股")
     parser.add_argument("--min-monthly-revenue", type=float, default=0.0, help="最低月營收門檻（元）")
     parser.add_argument("--lookback", type=int, default=252, help="歷史回看日數")
     parser.add_argument("--timeout", type=float, default=10.0, help="HTTP 逾時秒數")
-    parser.add_argument("--theme-mode", choices=["strict", "broad"], default="strict", help="題材池模式")
+    parser.add_argument("--theme-mode", choices=["strict", "broad"], default=None, help="Deprecated 題材池模式；strict 對應 core，broad 對應 broad")
+    parser.add_argument("--universe-mode", choices=["core", "coverage", "broad"], default=None, help="候選池模式；預設 coverage")
     parser.add_argument("--benchmark", choices=["TAIEX", "sector", "custom"], default="TAIEX", help="benchmark 模式")
     parser.add_argument("--output-format", default="md,json,csv", help="輸出格式，逗號分隔：md,json,csv")
     parser.add_argument("--config", default=None, help="JSON / YAML config 路徑")
@@ -340,6 +345,29 @@ def _copy_coverage_list(source: Path | None, target_dir: Path) -> Path | None:
     return target_path
 
 
+def _theme_metadata_for_symbol(symbol: str, rule: dict[str, Any]) -> dict[str, Any]:
+    bucket_map = rule.get("bucket_map") or {}
+    buckets = list(bucket_map.get(str(symbol)) or [])
+    if not buckets:
+        buckets = [str(rule.get("name") or "theme").lower().replace(" ", "_")]
+    core_symbols = set(rule.get("core_symbols") or rule.get("strict_symbols") or [])
+    coverage_symbols = set(rule.get("coverage_symbols") or [])
+    if str(symbol) in core_symbols:
+        source = "core"
+    elif str(symbol) in coverage_symbols:
+        source = "coverage"
+    else:
+        source = "broad_keyword"
+    return {
+        "universe_mode": str(rule.get("universe_mode") or "coverage"),
+        "universe_source": source,
+        "theme_buckets": buckets,
+        "primary_bucket": buckets[0],
+        "coverage_reason": f"{source}:{','.join(buckets)}",
+        "core_watchlist_member": str(symbol) in core_symbols,
+    }
+
+
 def _build_validation_snapshots(raw_rows: list[dict[str, Any]], validation_window: str, rebalance: str) -> list[dict[str, Any]]:
     if not raw_rows:
         return []
@@ -430,7 +458,8 @@ def _build_validation_report(
                 selected_metrics = payload.get("metrics") or {}
                 break
     return {
-        "mode": "factor_aware_cross_sectional_v2",
+        "mode": "validation_report_v3",
+        "base_mode": "factor_aware_cross_sectional_v2",
         "window": requested_window,
         "rebalance": rebalance,
         "cost_bps": cost_bps,
@@ -454,7 +483,8 @@ def run(
     timeout: float,
     output_root: Path | None = None,
     output_dir: Path | None = None,
-    theme_mode: str = "strict",
+    theme_mode: str | None = None,
+    universe_mode: str | None = None,
     benchmark: str = "TAIEX",
     output_formats: set[str] | None = None,
     config_path: str | Path | None = None,
@@ -484,7 +514,26 @@ def run(
     provider = TwMarketProvider(timeout=timeout, cache_dir=resolved_output_root / "cache" / "market")
     weights = dict(config.get("weights") or {})
     min_revenue = max(float(config.get("filters", {}).get("min_monthly_revenue", 0.0) or 0.0), min_monthly_revenue)
-    universe = provider.load_theme_universe(theme, min_monthly_revenue=min_revenue, theme_mode=theme_mode)
+    if theme_mode and universe_mode:
+        warnings.append("theme_mode is deprecated; --universe-mode takes precedence.")
+    rule = theme_rule(theme, theme_mode=theme_mode, universe_mode=universe_mode)
+    resolved_universe_mode = str(rule.get("universe_mode") or "coverage")
+    resolved_theme_mode = str(rule.get("theme_mode") or ("broad" if resolved_universe_mode == "broad" else "strict"))
+    try:
+        universe = provider.load_theme_universe(
+            theme,
+            min_monthly_revenue=min_revenue,
+            theme_mode=resolved_theme_mode,
+            universe_mode=resolved_universe_mode,
+        )
+    except TypeError:
+        universe = provider.load_theme_universe(theme, min_monthly_revenue=min_revenue, theme_mode=resolved_theme_mode)
+    universe = [{**item, **{k: v for k, v in _theme_metadata_for_symbol(str(item.get("symbol")), rule).items() if not item.get(k)}} for item in universe]
+    universe_size_before_limit = len(universe)
+    bucket_counts: dict[str, int] = {}
+    for item in universe:
+        for bucket in item.get("theme_buckets") or []:
+            bucket_counts[str(bucket)] = bucket_counts.get(str(bucket), 0) + 1
     if not universe:
         raise RuntimeError(f"找不到主題 {theme} 的候選股")
     update_result = provider.run_quality_update_check(
@@ -495,7 +544,7 @@ def run(
         budget_sec=quality_update_budget_sec,
         history_depth=quality_history_depth,
         top_n=min(3, top_n),
-        theme_mode=theme_mode,
+        theme_mode=resolved_theme_mode,
     )
 
     date_tag = as_of.strftime("%Y%m%d")
@@ -543,6 +592,7 @@ def run(
         }
     except Exception as exc:
         warnings.append(f"加權指數抓取失敗：{exc}")
+    macro_regime_overlay = build_local_macro_overlay(market_overview, as_of)
 
     raw_rows: list[dict[str, Any]] = []
     for candidate in universe[:universe_limit]:
@@ -728,6 +778,7 @@ def run(
                 "benchmark_score": benchmark_score,
                 "risk_control_score": risk_control_score,
                 "valuation_band": _band_from_percentile(value_score),
+                "macro_regime_overlay": macro_regime_overlay,
             }
         )
 
@@ -735,6 +786,9 @@ def run(
     for idx, row in enumerate(ranked, start=1):
         row["rank"] = idx
         row["as_of"] = as_of.isoformat()
+        stock_risk_metrics = calculate_stock_risk_metrics(row.get("_candles") or [])
+        row["stock_risk_metrics"] = stock_risk_metrics
+        row["risk_adjusted_score"] = stock_risk_metrics.get("risk_adjusted_score")
         row["action_view"] = build_action_view(
             idea_score=float(row.get("idea_score") or 0.0),
             confidence_score=float(row.get("confidence_score") or 0.0),
@@ -830,11 +884,12 @@ def run(
             row["action_view"]["research_action"] = recommendation["action_view"]
             row["action_view"]["risk_score"] = recommendation["risk_score"]
             row["action_view"]["invalidation_conditions"] = recommendation["invalidation_conditions"]
+            row["action_view"]["macro_regime_overlay"] = macro_regime_overlay
 
-    picks: list[dict[str, Any]] = []
-    for row in ranked[:top_n]:
+    picks_all: list[dict[str, Any]] = []
+    for row in ranked:
         public_row = {key: value for key, value in row.items() if key != "_candles"}
-        picks.append(
+        picks_all.append(
             {
                 **public_row,
                 "reasons": _reasons(public_row),
@@ -850,11 +905,26 @@ def run(
             }
         )
 
+    candidate_lists = build_candidate_lists(picks_all, top_n=top_n)
+    picks = candidate_lists["picks"]
+    buying_ranking = candidate_lists["buying_ranking"]
+    actionable_queue = candidate_lists["actionable_queue"]
+    watchlist_candidates = candidate_lists["watchlist_candidates"]
+    research_list = candidate_lists["research_list"]
+
     top_rows = ranked[:top_n]
     recommendation_distribution: dict[str, int] = {}
     for row in top_rows:
         rec = str(row.get("recommendation") or "N/A")
         recommendation_distribution[rec] = recommendation_distribution.get(rec, 0) + 1
+    decision_tier_distribution: dict[str, int] = {}
+    for row in research_list:
+        tier = str(row.get("decision_tier") or "wait_for_trigger")
+        decision_tier_distribution[tier] = decision_tier_distribution.get(tier, 0) + 1
+    buying_tier_distribution: dict[str, int] = {}
+    for row in buying_ranking:
+        tier = str(row.get("buying_tier") or "not_buyable")
+        buying_tier_distribution[tier] = buying_tier_distribution.get(tier, 0) + 1
     high_risk_candidates = [
         {"symbol": row.get("symbol"), "name": row.get("name"), "risk_score": row.get("risk_score")}
         for row in top_rows
@@ -868,7 +938,18 @@ def run(
     )
     sector_overview = {
         "universe_count": len(ranked),
+        "selection_pool_count": len(picks_all),
+        "universe_mode": resolved_universe_mode,
+        "universe_size_before_limit": universe_size_before_limit,
+        "universe_limit_applied": universe_limit > 0 and universe_size_before_limit > universe_limit,
+        "core_count": len(rule.get("core_symbols") or []),
+        "coverage_count": len(rule.get("coverage_symbols") or []),
+        "bucket_counts": bucket_counts,
         "top_n": len(top_rows),
+        "research_display_limit": top_n,
+        "buying_display_limit": top_n,
+        "actionable_display_limit": top_n,
+        "watchlist_display_limit": top_n,
         "top_avg_idea": _avg([x.get("idea_score") for x in top_rows]),
         "top_avg_confidence": _avg([x.get("confidence_score") for x in top_rows]),
         "avg_ret_20d": theme_avg_ret20,
@@ -877,12 +958,21 @@ def run(
         "quality_coverage_summary": quality_coverage_summary,
         "history_depth_target": quality_history_depth,
         "recommendation_distribution": recommendation_distribution,
+        "decision_tier_distribution": decision_tier_distribution,
+        "buying_tier_distribution": buying_tier_distribution,
+        "list_counts": {
+            "buying_ranking": len(buying_ranking),
+            "actionable_queue": len(actionable_queue),
+            "watchlist_candidates": len(watchlist_candidates),
+            "research_list": len(research_list),
+        },
         "strongest_buy_candidates": [
             {"symbol": row.get("symbol"), "name": row.get("name"), "idea_score": row.get("idea_score")}
             for row in top_rows
             if row.get("recommendation") == "買入"
         ],
         "high_risk_candidates": high_risk_candidates,
+        "macro_regime_overlay": macro_regime_overlay,
     }
 
     validation_summary: dict[str, Any] = {"mode": "not-run", "window": validation_window, "rebalance": rebalance, "cost_bps": cost_bps}
@@ -891,14 +981,63 @@ def run(
         validation_summary = _build_validation_report(raw_rows, taiex_series, validation_window, rebalance, top_n, cost_bps)
         outputs["backtest"] = write_json_report(backtests_dir / f"validation-{theme}-{date_tag}.json", validation_summary)
 
-    top_pick = picks[0] if picks else {}
+    top_pick = buying_ranking[0] if buying_ranking else {}
+    action_pick = actionable_queue[0] if actionable_queue else {}
+    research_top = research_list[0] if research_list else {}
+    formal_buy_count = buying_tier_distribution.get("formal_buy", 0)
+    risk_adjusted_buy_count = buying_tier_distribution.get("risk_adjusted_buy", 0)
+    tactical_buy_count = buying_tier_distribution.get("tactical_buy", 0)
+    if top_pick and formal_buy_count == 0 and risk_adjusted_buy_count > 0:
+        buy_summary = (
+            f"無正式買進；風險調整買進榜首 `{top_pick.get('symbol')}` {top_pick.get('name')}，"
+            f"buyability `{top_pick.get('buyability_score')}`，tier `{top_pick.get('buying_tier', 'N/A')}`"
+        )
+    elif top_pick and formal_buy_count == 0 and tactical_buy_count > 0:
+        buy_summary = (
+            f"無正式買進；戰術買進榜首 `{top_pick.get('symbol')}` {top_pick.get('name')}，"
+            f"buyability `{top_pick.get('buyability_score')}`，tier `{top_pick.get('buying_tier', 'N/A')}`"
+        )
+    elif top_pick:
+        buy_summary = (
+            f"買進榜首 `{top_pick.get('symbol')}` {top_pick.get('name')}，"
+            f"buyability `{top_pick.get('buyability_score')}`，tier `{top_pick.get('buying_tier', 'N/A')}`"
+        )
+    elif risk_adjusted_buy_count:
+        buy_summary = "無正式買進，但有風險調整買進候選"
+    elif tactical_buy_count:
+        buy_summary = "無正式買進，但有戰術買進候選"
+    else:
+        buy_summary = "無買進候選"
+    tier_text = (
+        f"formal buy {formal_buy_count} 檔；risk-adjusted buy {risk_adjusted_buy_count} 檔；"
+        f"tactical buy {tactical_buy_count} 檔；actionable {len(actionable_queue)} 檔；"
+        f"接近可買 {decision_tier_distribution.get('near_buy', 0)} 檔；"
+        f"小部位試單 {decision_tier_distribution.get('starter_position', 0)} 檔；"
+        f"等待觸發 {decision_tier_distribution.get('wait_for_trigger', 0)} 檔；"
+        f"避開/降風險 {decision_tier_distribution.get('avoid', 0)} 檔"
+    )
+    next_step = (
+        f"下一步看 `{top_pick.get('symbol')}` {top_pick.get('name')}：{top_pick.get('next_action')}"
+        if top_pick
+        else f"下一步看 `{action_pick.get('symbol')}` {action_pick.get('name')}：{action_pick.get('next_action')}"
+        if action_pick
+        else "下一步：正式買進與可行動候選都為 0，空手等待或換主題。"
+    )
+    summary_ref = top_pick or action_pick or research_top
+    research_warning = ""
+    if research_top and (not top_pick or research_top.get("symbol") != top_pick.get("symbol")):
+        research_warning = (
+            f"；最高研究優先標的 `{research_top.get('symbol')}` {research_top.get('name')} "
+            f"目前建議 `{research_top.get('recommendation', 'N/A')}`，"
+            f"{research_top.get('exclusion_from_buying_reason') or '未列入買進榜'}"
+        )
     summary = (
-        f"Thesis：{theme} 類股目前由 `{top_pick.get('symbol', '-')}` {top_pick.get('name', '-') } 領跑，"
-        f"top {len(picks)} 平均 idea score `{(sector_overview.get('top_avg_idea') or 0.0):.1f}`。"
-        f" Evidence：相對題材 20 日超額 `{((top_pick.get('benchmark_view') or {}).get('rel_to_sector_20d') or 0.0):.2f}%`，"
-        f"confidence `{top_pick.get('confidence_score', 0.0):.1f}`。"
-        f" Risk：{'；'.join(top_pick.get('data_quality_flags') or ['主要風險在題材回檔'])}。"
-        f" Action：`{(top_pick.get('action_view') or {}).get('action', 'Neutral')}`；建議評估 `{top_pick.get('recommendation', 'N/A')}`。"
+        f"Thesis：{theme} 類股目前 {buy_summary}；{tier_text}。{next_step}{research_warning}。"
+        f" Research List top {len(research_list)} 平均 idea score `{(sector_overview.get('top_avg_idea') or 0.0):.1f}`。"
+        f" Evidence：相對題材 20 日超額 `{((summary_ref.get('benchmark_view') or {}).get('rel_to_sector_20d') or 0.0):.2f}%`，"
+        f"confidence `{summary_ref.get('confidence_score', 0.0):.1f}`。"
+        f" Risk：{'；'.join(summary_ref.get('data_quality_flags') or ['主要風險在題材回檔'])}。"
+        f" Action：`{(summary_ref.get('action_view') or {}).get('action', 'Neutral')}`；建議評估 `{summary_ref.get('recommendation', 'N/A')}`。"
         f" What changes my mind：若相對題材 20 日動能轉負、confidence 下滑或法說/營收驗證失敗，就降級。"
     )
 
@@ -909,7 +1048,7 @@ def run(
         "Action 與 ranking 拆開：排名是研究優先序，Overweight/Neutral/Underweight 才是動作建議。",
     ]
     if run_backtest:
-        method.append("Validation 已升級成 factor-aware cross-sectional v2，固定輸出 1Y / 3Y / 5Y 視窗與 factor sleeves。")
+        method.append("Validation 已升級成 v3：保留 factor sleeves，並加入 portfolio risk diagnostics 與 benchmark-relative attribution。")
     risks = [
         "這是研究輔助，不是保證報酬；遇到法說、月營收、AI 出貨節奏變化時，結論需要重新驗證。",
         "若 benchmark-relative 轉負且 confidence 下滑，應優先減碼而不是凹單。",
@@ -924,7 +1063,15 @@ def run(
     audit_payload = {
         "theme": theme,
         "as_of": as_of.isoformat(),
-        "theme_mode": theme_mode,
+        "theme_mode": resolved_theme_mode,
+        "universe_mode": resolved_universe_mode,
+        "universe_source": "curated_theme_library",
+        "universe_size_before_limit": universe_size_before_limit,
+        "selection_pool_count": len(picks_all),
+        "universe_limit_applied": universe_limit > 0 and universe_size_before_limit > universe_limit,
+        "universe_core_count": len(rule.get("core_symbols") or []),
+        "universe_coverage_count": len(rule.get("coverage_symbols") or []),
+        "universe_bucket_counts": bucket_counts,
         "benchmark": benchmark,
         "output_formats": sorted(output_formats),
         "warnings": warnings,
@@ -945,11 +1092,15 @@ def run(
         "backfill_run_id": update_result.get("backfill_run_id"),
         "repair_refreshed_symbols": update_result.get("repair_refreshed_symbols") or [],
         "output_root": str(resolved_output_root),
-        "provider_versions": {"market_provider": "twse_openapi+tpex_openapi", "validation_engine": "factor_aware_cross_sectional_v2"},
+        "provider_versions": {"market_provider": "twse_openapi+tpex_openapi", "validation_engine": "validation_report_v3"},
+        "connector_contract_version": "supplementary-json-contract-v1",
+        "supplementary_connectors": [macro_regime_overlay],
+        "macro_regime_overlay": macro_regime_overlay,
         "quality_coverage_summary": quality_coverage_summary,
         "backtest_config": {"enabled": run_backtest, "window": validation_window, "rebalance": rebalance, "cost_bps": cost_bps},
         "recommendation_policy_version": "tw-recommendation-v1",
         "recommendation_mode": recommendation_mode,
+        "stock_risk_metrics_version": "stock-risk-v1",
         "llm_review": {
             "enabled": recommendation_mode == "llm-review",
             "provider": llm_provider,
@@ -958,6 +1109,21 @@ def run(
             "status": "deterministic-review-fallback",
         },
         "recommendation_distribution": recommendation_distribution,
+        "decision_tier_distribution": decision_tier_distribution,
+        "buying_gate_policy_version": "tw-buying-gate-v2",
+        "buying_tier_distribution": buying_tier_distribution,
+        "ranking_policy_version": "tw-three-list-v1",
+        "action_queue_policy_version": "tw-actionable-queue-v1",
+        "research_display_limit": top_n,
+        "buying_display_limit": top_n,
+        "actionable_display_limit": top_n,
+        "watchlist_display_limit": top_n,
+        "list_counts": sector_overview["list_counts"],
+        "buy_now_count": decision_tier_distribution.get("buy_now", 0),
+        "near_buy_count": decision_tier_distribution.get("near_buy", 0),
+        "starter_position_count": decision_tier_distribution.get("starter_position", 0),
+        "wait_for_trigger_count": decision_tier_distribution.get("wait_for_trigger", 0),
+        "avoid_count": decision_tier_distribution.get("avoid", 0),
         "universe_count": len(universe),
         "ranked_count": len(ranked),
     }
@@ -973,12 +1139,18 @@ def run(
                     "summary": summary,
                     "market_overview": market_overview,
                     "sector_overview": sector_overview,
+                    "universe_overview": sector_overview,
                     "method": method,
                     "picks": picks,
+                    "buying_ranking": buying_ranking,
+                    "actionable_queue": actionable_queue,
+                    "watchlist_candidates": watchlist_candidates,
+                    "research_list": research_list,
                     "risks": risks,
                     "audit": audit_payload,
                     "sources": ["TWSE OpenAPI", "TWSE exchangeReport", "TPEx OpenAPI", "TPEx afterTrading API"],
                     "validation_summary": validation_summary,
+                    "macro_regime_overlay": macro_regime_overlay,
                 }
             ),
             encoding="utf-8",
@@ -992,10 +1164,16 @@ def run(
                 "as_of": as_of.isoformat(),
                 "summary": summary,
                 "picks": picks,
+                "buying_ranking": buying_ranking,
+                "actionable_queue": actionable_queue,
+                "watchlist_candidates": watchlist_candidates,
+                "research_list": research_list,
                 "sector_overview": sector_overview,
+                "universe_overview": sector_overview,
                 "market_overview": market_overview,
                 "validation_summary": validation_summary,
                 "audit": audit_payload,
+                "macro_regime_overlay": macro_regime_overlay,
             },
         )
     decisions_payload = {
@@ -1039,6 +1217,7 @@ def main() -> int:
             output_root=Path(args.output_root) if args.output_root else None,
             output_dir=Path(args.output_dir) if args.output_dir else None,
             theme_mode=args.theme_mode,
+            universe_mode=args.universe_mode,
             benchmark=args.benchmark,
             output_formats={x.strip() for x in str(args.output_format).split(",") if x.strip()},
             config_path=args.config,

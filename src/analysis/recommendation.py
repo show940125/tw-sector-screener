@@ -63,8 +63,13 @@ def build_sector_recommendation(
         risk_score += min(20.0, len(flags) * 5.0)
     if row.get("quality_fetch_status") in {"partial", "unavailable", "fetch_failed"}:
         risk_score += 8.0
+    macro_overlay = row.get("macro_regime_overlay") if isinstance(row.get("macro_regime_overlay"), dict) else {}
+    macro_risk_adjustment = macro_overlay.get("risk_adjustment", 0.0) if isinstance(macro_overlay, dict) else 0.0
+    if isinstance(macro_risk_adjustment, (int, float)):
+        risk_score += float(macro_risk_adjustment)
     risk_score = _clamp(risk_score, 5.0, 95.0)
-    blockers = bool(HARD_BLOCKERS.intersection(flags)) or risk_score > 65.0
+    macro_blocks_buy = isinstance(macro_overlay, dict) and macro_overlay.get("risk_level") == "elevated"
+    blockers = bool(HARD_BLOCKERS.intersection(flags)) or risk_score > 65.0 or macro_blocks_buy
 
     trend_break = trend <= 35.0 or momentum <= 35.0 or _num(row.get("rel_to_sector_20d"), 0.0) < -5.0
     if support_count >= 2 and confidence >= 65.0 and idea >= 62.0 and risk_score <= 65.0 and not blockers:
@@ -132,7 +137,9 @@ def build_sector_recommendation(
             "benchmark_score",
             "risk_control_score",
             "data_quality_flags",
+            *(macro_overlay.get("evidence_refs") or [] if isinstance(macro_overlay, dict) else []),
         ],
+        "macro_regime_overlay": macro_overlay or None,
         "review_notes": {
             "bull_case": f"支持理由數 {support_count}，idea score {idea:.1f}。",
             "bear_case": f"主要反方為波動 {volatility:.1f}、risk score {risk_score:.1f} 與資料旗標。",

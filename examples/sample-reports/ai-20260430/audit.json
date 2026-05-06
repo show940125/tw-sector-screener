@@ -1,0 +1,189 @@
+{
+  "theme": "AI",
+  "as_of": "2026-04-30",
+  "theme_mode": "strict",
+  "universe_mode": "coverage",
+  "universe_source": "curated_theme_library",
+  "universe_size_before_limit": 54,
+  "selection_pool_count": 54,
+  "universe_limit_applied": false,
+  "universe_core_count": 9,
+  "universe_coverage_count": 54,
+  "universe_bucket_counts": {
+    "ai_server_odm": 9,
+    "semiconductor": 28,
+    "foundry": 5,
+    "ic_design": 8,
+    "power_connector_chassis": 3,
+    "display_proxy": 2,
+    "networking_optical": 1,
+    "telecom_proxy": 3,
+    "memory_hbm": 9,
+    "cooling_thermal": 4,
+    "advanced_packaging_substrate": 3,
+    "pcb_ccl": 3,
+    "testing_equipment": 3,
+    "materials": 3
+  },
+  "benchmark": "TAIEX",
+  "output_formats": [
+    "csv",
+    "json",
+    "md"
+  ],
+  "warnings": [],
+  "weights": {
+    "trend_score": 0.28,
+    "momentum_score": 0.22,
+    "value_score": 0.16,
+    "fundamental_score": 0.16,
+    "quality_score": 0.1,
+    "benchmark_score": 0.05,
+    "risk_control_score": 0.03
+  },
+  "config_path": null,
+  "coverage_list_path": null,
+  "copied_coverage_list_path": null,
+  "cache_dir": "C:\\webtemp\\tw-sector-ai-20260430-stockrisk-sample2-20260505180433\\cache\\market",
+  "quarterly_store_path": "C:\\webtemp\\tw-sector-ai-20260430-stockrisk-sample2-20260505180433\\cache\\market\\quarterly_fundamentals.sqlite",
+  "refresh_run_id": null,
+  "quality_period_requirement": 2,
+  "quality_update_mode": "skip",
+  "quality_update_decision": "skipped",
+  "quality_update_budget_sec": 3.0,
+  "history_depth_target": 8,
+  "history_complete_pct": 0.0,
+  "backfill_enqueued": true,
+  "backfill_run_id": "backfill-auto-check-349cb701",
+  "repair_refreshed_symbols": [],
+  "output_root": "C:\\webtemp\\tw-sector-ai-20260430-stockrisk-sample2-20260505180433",
+  "provider_versions": {
+    "market_provider": "twse_openapi+tpex_openapi",
+    "validation_engine": "validation_report_v3"
+  },
+  "connector_contract_version": "supplementary-json-contract-v1",
+  "supplementary_connectors": [
+    {
+      "tier": "supplementary",
+      "source": "macro-regime-local-proxy",
+      "as_of": "2026-04-30",
+      "freshness": "current",
+      "success": true,
+      "regime": "neutral",
+      "risk_level": "normal",
+      "risk_adjustment": 0.0,
+      "rank_signal": false,
+      "evidence_refs": [
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "data_quality_flags": [
+        "connector:macro-regime-local-proxy:supplementary"
+      ],
+      "license_hint": "supplementary"
+    }
+  ],
+  "macro_regime_overlay": {
+    "tier": "supplementary",
+    "source": "macro-regime-local-proxy",
+    "as_of": "2026-04-30",
+    "freshness": "current",
+    "success": true,
+    "regime": "neutral",
+    "risk_level": "normal",
+    "risk_adjustment": 0.0,
+    "rank_signal": false,
+    "evidence_refs": [
+      "market_overview.trend_score",
+      "market_overview.ret_20d",
+      "market_overview.rsi14",
+      "macro_regime_overlay",
+      "macro-regime-local-proxy"
+    ],
+    "data_quality_flags": [
+      "connector:macro-regime-local-proxy:supplementary"
+    ],
+    "license_hint": "supplementary"
+  },
+  "quality_coverage_summary": {
+    "universe_count": 54,
+    "current_complete_count": 7,
+    "current_complete_pct": 12.96,
+    "previous_complete_count": 0,
+    "previous_complete_pct": 0.0,
+    "history_complete_count": 0,
+    "history_complete_pct": 0.0,
+    "ok_count": 7,
+    "unavailable_count": 45,
+    "partial_count": 1,
+    "fetch_failed_count": 1,
+    "top_candidate_gap_count": 3,
+    "top_candidate_gaps": [
+      {
+        "rank": 1,
+        "symbol": "8271",
+        "quality_fetch_status": "ok",
+        "quality_missing_reason": "previous_period_unavailable"
+      },
+      {
+        "rank": 2,
+        "symbol": "2337",
+        "quality_fetch_status": "ok",
+        "quality_missing_reason": "previous_period_unavailable"
+      },
+      {
+        "rank": 3,
+        "symbol": "4967",
+        "quality_fetch_status": "unavailable",
+        "quality_missing_reason": "unavailable"
+      }
+    ]
+  },
+  "backtest_config": {
+    "enabled": true,
+    "window": "1y",
+    "rebalance": "monthly",
+    "cost_bps": 10.0
+  },
+  "recommendation_policy_version": "tw-recommendation-v1",
+  "recommendation_mode": "deterministic",
+  "stock_risk_metrics_version": "stock-risk-v1",
+  "llm_review": {
+    "enabled": false,
+    "provider": null,
+    "model": null,
+    "review_top_n": 8,
+    "status": "deterministic-review-fallback"
+  },
+  "recommendation_distribution": {
+    "持有": 17,
+    "賣出": 3
+  },
+  "decision_tier_distribution": {
+    "avoid": 13,
+    "starter_position": 3,
+    "near_buy": 4
+  },
+  "ranking_policy_version": "tw-three-list-v1",
+  "action_queue_policy_version": "tw-actionable-queue-v1",
+  "research_display_limit": 20,
+  "buying_display_limit": 20,
+  "actionable_display_limit": 20,
+  "watchlist_display_limit": 20,
+  "list_counts": {
+    "buying_ranking": 1,
+    "actionable_queue": 20,
+    "watchlist_candidates": 20,
+    "research_list": 20
+  },
+  "buy_now_count": 0,
+  "near_buy_count": 4,
+  "starter_position_count": 3,
+  "wait_for_trigger_count": 0,
+  "avoid_count": 13,
+  "universe_count": 54,
+  "ranked_count": 54
+}

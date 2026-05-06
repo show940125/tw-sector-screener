@@ -205,12 +205,13 @@ class TwMarketProvider:
         theme: str,
         min_monthly_revenue: float = 0.0,
         theme_mode: str = "strict",
+        universe_mode: str | None = None,
     ) -> list[dict[str, Any]]:
-        rule = theme_rule(theme, theme_mode=theme_mode)
+        rule = theme_rule(theme, theme_mode=theme_mode, universe_mode=universe_mode)
         output: list[dict[str, Any]] = []
         for row in self.load_all_universe(min_monthly_revenue=min_monthly_revenue):
             if self._theme_match(row["symbol"], row["name"], row.get("industry") or "", rule):
-                output.append(row)
+                output.append({**row, **self._theme_metadata(row["symbol"], rule)})
 
         output.sort(key=lambda x: x.get("monthly_revenue", 0.0), reverse=True)
         return output
@@ -292,7 +293,7 @@ class TwMarketProvider:
     def _theme_match(self, symbol: str, name: str, industry: str, rule: dict[str, Any]) -> bool:
         if symbol in set(rule.get("symbols") or []):
             return True
-        if rule.get("theme_mode") != "broad":
+        if rule.get("universe_mode") != "broad":
             return False
         text = f"{name} {industry}".lower()
         for kw in rule.get("name_keywords") or []:
@@ -302,6 +303,29 @@ class TwMarketProvider:
             if str(kw).lower() in industry.lower():
                 return True
         return False
+
+    def _theme_metadata(self, symbol: str, rule: dict[str, Any]) -> dict[str, Any]:
+        bucket_map = rule.get("bucket_map") or {}
+        buckets = list(bucket_map.get(symbol) or [])
+        if not buckets:
+            buckets = [str(rule.get("name") or "theme").lower().replace(" ", "_")]
+        universe_mode = str(rule.get("universe_mode") or "coverage")
+        core_symbols = set(rule.get("core_symbols") or rule.get("strict_symbols") or [])
+        coverage_symbols = set(rule.get("coverage_symbols") or [])
+        if symbol in core_symbols:
+            source = "core"
+        elif symbol in coverage_symbols:
+            source = "coverage"
+        else:
+            source = "broad_keyword"
+        return {
+            "universe_mode": universe_mode,
+            "universe_source": source,
+            "theme_buckets": buckets,
+            "primary_bucket": buckets[0] if buckets else None,
+            "coverage_reason": f"{source}:{','.join(buckets)}",
+            "core_watchlist_member": symbol in core_symbols,
+        }
 
     def _symbol_field(self, row: dict[str, Any]) -> str:
         return str(

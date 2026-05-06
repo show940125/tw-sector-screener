@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from src.providers.tw_market_provider import TwMarketProvider
-from src.themes import available_themes
+from src.themes import available_themes, theme_rule
 
 
 class ThemeModeTests(unittest.TestCase):
@@ -42,6 +42,48 @@ class ThemeModeTests(unittest.TestCase):
 
         self.assertEqual([row["symbol"] for row in strict_rows], ["2382"])
         self.assertEqual([row["symbol"] for row in broad_rows], ["2412", "2382"])
+
+    def test_ai_coverage_is_larger_than_core_and_has_buckets(self) -> None:
+        core = theme_rule("AI", universe_mode="core")
+        coverage = theme_rule("AI", universe_mode="coverage")
+
+        self.assertEqual(len(core["symbols"]), 9)
+        self.assertGreater(len(coverage["symbols"]), len(core["symbols"]))
+        self.assertIn("2330", coverage["bucket_map"])
+        self.assertIn("semiconductor", coverage["bucket_map"]["2330"])
+        self.assertEqual(core["universe_mode"], "core")
+        self.assertEqual(coverage["universe_mode"], "coverage")
+
+    def test_deprecated_strict_maps_to_core(self) -> None:
+        strict = theme_rule("AI", theme_mode="strict")
+        core = theme_rule("AI", universe_mode="core")
+
+        self.assertEqual(strict["universe_mode"], "core")
+        self.assertEqual(strict["symbols"], core["symbols"])
+
+    def test_coverage_candidates_include_bucket_metadata(self) -> None:
+        provider = TwMarketProvider(timeout=0.1)
+        symbols = theme_rule("AI", universe_mode="coverage")["symbols"][:4]
+        mocked = [
+            {
+                "symbol": symbol,
+                "name": symbol,
+                "market": "TWSE",
+                "industry": "半導體業",
+                "monthly_revenue": 100.0,
+                "revenue_yoy": 1.0,
+                "revenue_mom": 1.0,
+            }
+            for symbol in symbols
+        ]
+        with patch.object(provider, "load_all_universe", return_value=mocked):
+            rows = provider.load_theme_universe("AI", universe_mode="coverage")
+
+        self.assertEqual(len(rows), len(symbols))
+        for row in rows:
+            self.assertIn("primary_bucket", row)
+            self.assertTrue(row["theme_buckets"])
+            self.assertEqual(row["universe_mode"], "coverage")
 
 
 if __name__ == "__main__":

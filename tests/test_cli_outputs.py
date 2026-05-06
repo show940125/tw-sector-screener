@@ -152,6 +152,11 @@ class _FakeProvider:
 
 
 class CliOutputTests(unittest.TestCase):
+    def test_cli_default_top_n_is_20(self) -> None:
+        with patch("sys.argv", ["tw_sector_screener.py", "--theme", "AI"]):
+            args = cli.parse_args()
+        self.assertEqual(args.top_n, 20)
+
     def test_run_writes_markdown_json_csv_audit_and_watchlist_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             output_dir = Path(tmp)
@@ -169,6 +174,7 @@ class CliOutputTests(unittest.TestCase):
                     timeout=0.1,
                     output_root=output_dir,
                     theme_mode="strict",
+                    universe_mode="coverage",
                     benchmark="TAIEX",
                     output_formats={"md", "json", "csv"},
                     config_path=None,
@@ -196,6 +202,10 @@ class CliOutputTests(unittest.TestCase):
 
             payload = json.loads(outputs["json"].read_text(encoding="utf-8"))
             self.assertIn("picks", payload)
+            self.assertIn("buying_ranking", payload)
+            self.assertIn("actionable_queue", payload)
+            self.assertIn("watchlist_candidates", payload)
+            self.assertIn("research_list", payload)
             self.assertIn("audit", payload)
             self.assertIn("action_view", payload["picks"][0])
             self.assertIn("recommendation", payload["picks"][0])
@@ -204,16 +214,50 @@ class CliOutputTests(unittest.TestCase):
             self.assertIn("confidence_score", payload["picks"][0])
             self.assertIn("quality_data_source", payload["picks"][0])
             self.assertIn("quality_periods_used", payload["picks"][0])
+            self.assertIn("theme_buckets", payload["picks"][0])
+            self.assertIn("primary_bucket", payload["picks"][0])
+            self.assertIn("decision_tier", payload["picks"][0])
+            self.assertIn("actionability_score", payload["picks"][0])
+            self.assertIn("buying_tier", payload["picks"][0])
+            self.assertIn("stock_risk_metrics", payload["picks"][0])
+            self.assertIn("risk_adjusted_score", payload["picks"][0])
+            self.assertIn("stock_risk_metrics", payload["buying_ranking"][0])
+            self.assertIn("buying_tier", payload["buying_ranking"][0])
             self.assertIn("validation_summary", payload)
-            self.assertEqual(payload["validation_summary"]["mode"], "factor_aware_cross_sectional_v2")
+            self.assertEqual(payload["validation_summary"]["mode"], "validation_report_v3")
+            self.assertEqual(payload["validation_summary"]["base_mode"], "factor_aware_cross_sectional_v2")
             self.assertIn("windows", payload["validation_summary"])
+            self.assertIn("portfolio_diagnostics", payload["validation_summary"]["metrics"])
+            self.assertIn("macro_regime_overlay", payload["picks"][0])
             self.assertIn("quality_coverage_summary", payload["sector_overview"])
+            self.assertIn("selection_pool_count", payload["sector_overview"])
+            self.assertEqual(payload["sector_overview"]["research_display_limit"], 2)
+            self.assertEqual(payload["sector_overview"]["buying_display_limit"], 2)
 
             audit = json.loads(outputs["audit"].read_text(encoding="utf-8"))
             self.assertEqual(audit["output_root"], str(output_dir))
+            self.assertEqual(audit["universe_mode"], "coverage")
+            self.assertIn("universe_size_before_limit", audit)
+            self.assertIn("selection_pool_count", audit)
+            self.assertIn("universe_limit_applied", audit)
+            self.assertIn("theme_mode is deprecated", " / ".join(audit["warnings"]))
             self.assertIn("backtest_config", audit)
             self.assertIn("recommendation_policy_version", audit)
             self.assertIn("recommendation_distribution", audit)
+            self.assertEqual(audit["ranking_policy_version"], "tw-three-list-v1")
+            self.assertEqual(audit["action_queue_policy_version"], "tw-actionable-queue-v1")
+            self.assertEqual(audit["stock_risk_metrics_version"], "stock-risk-v1")
+            self.assertEqual(audit["research_display_limit"], 2)
+            self.assertEqual(audit["buying_display_limit"], 2)
+            self.assertEqual(audit["actionable_display_limit"], 2)
+            self.assertEqual(audit["watchlist_display_limit"], 2)
+            self.assertIn("decision_tier_distribution", audit)
+            self.assertEqual(audit["buying_gate_policy_version"], "tw-buying-gate-v2")
+            self.assertIn("buying_tier_distribution", audit)
+            self.assertIn("near_buy_count", audit)
+            self.assertIn("list_counts", audit)
+            self.assertEqual(audit["connector_contract_version"], "supplementary-json-contract-v1")
+            self.assertIn("supplementary_connectors", audit)
             self.assertIn("quality_coverage_summary", audit)
             self.assertIn("quarterly_store_path", audit)
             self.assertEqual(audit["quality_period_requirement"], 2)
@@ -228,6 +272,11 @@ class CliOutputTests(unittest.TestCase):
             self.assertIn("recommendation", watchlist["rows"][0])
             self.assertIn("recommendation_delta", watchlist["rows"][0])
             self.assertIn("action_required", watchlist["rows"][0])
+
+            csv_text = outputs["csv"].read_text(encoding="utf-8-sig")
+            self.assertIn("risk_adjusted_score", csv_text)
+            self.assertIn("buying_tier", csv_text)
+            self.assertIn("sharpe_ratio", csv_text)
 
     def test_run_supports_skip_update_mode_without_enqueue(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
