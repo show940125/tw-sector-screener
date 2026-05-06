@@ -1,0 +1,148 @@
+{
+  "run_id": "daily-AI-半導體",
+  "themes": [
+    "AI",
+    "半導體"
+  ],
+  "mode": "daily",
+  "start_date": "2026-05-06",
+  "end_date": "2026-05-06",
+  "initial_cash": 1000000.0,
+  "portfolio_summaries": [
+    {
+      "portfolio_id": "aggressive",
+      "name": "激進型",
+      "equity": 1000000.0,
+      "cash": 1000000.0,
+      "holdings_value": 0.0,
+      "return_pct": 0.0,
+      "max_drawdown_pct": 0.0,
+      "trade_count": 0,
+      "win_rate": 0.0,
+      "turnover_count": 0,
+      "portfolio_diagnostics": {
+        "status": "insufficient_data",
+        "period_count": 0,
+        "var95_pct": 0.0,
+        "cvar95_pct": 0.0,
+        "ulcer_index": 0.0,
+        "omega_ratio": 0.0,
+        "tail_ratio": 0.0,
+        "rolling_sharpe": [],
+        "rolling_volatility": [],
+        "rolling_drawdown": [],
+        "alpha_pct": 0.0,
+        "beta": 0.0,
+        "information_ratio": 0.0,
+        "tracking_error_pct": 0.0,
+        "benchmark_status": "not_provided"
+      }
+    },
+    {
+      "portfolio_id": "balanced",
+      "name": "穩健型",
+      "equity": 1000000.0,
+      "cash": 1000000.0,
+      "holdings_value": 0.0,
+      "return_pct": 0.0,
+      "max_drawdown_pct": 0.0,
+      "trade_count": 0,
+      "win_rate": 0.0,
+      "turnover_count": 0,
+      "portfolio_diagnostics": {
+        "status": "insufficient_data",
+        "period_count": 0,
+        "var95_pct": 0.0,
+        "cvar95_pct": 0.0,
+        "ulcer_index": 0.0,
+        "omega_ratio": 0.0,
+        "tail_ratio": 0.0,
+        "rolling_sharpe": [],
+        "rolling_volatility": [],
+        "rolling_drawdown": [],
+        "alpha_pct": 0.0,
+        "beta": 0.0,
+        "information_ratio": 0.0,
+        "tracking_error_pct": 0.0,
+        "benchmark_status": "not_provided"
+      }
+    },
+    {
+      "portfolio_id": "conservative",
+      "name": "保守型",
+      "equity": 1000000.0,
+      "cash": 1000000.0,
+      "holdings_value": 0.0,
+      "return_pct": 0.0,
+      "max_drawdown_pct": 0.0,
+      "trade_count": 0,
+      "win_rate": 0.0,
+      "turnover_count": 0,
+      "portfolio_diagnostics": {
+        "status": "insufficient_data",
+        "period_count": 0,
+        "var95_pct": 0.0,
+        "cvar95_pct": 0.0,
+        "ulcer_index": 0.0,
+        "omega_ratio": 0.0,
+        "tail_ratio": 0.0,
+        "rolling_sharpe": [],
+        "rolling_volatility": [],
+        "rolling_drawdown": [],
+        "alpha_pct": 0.0,
+        "beta": 0.0,
+        "information_ratio": 0.0,
+        "tracking_error_pct": 0.0,
+        "benchmark_status": "not_provided"
+      }
+    }
+  ],
+  "daily_equity": [
+    {
+      "trade_date": "2026-05-06",
+      "portfolio_id": "aggressive",
+      "equity": 1000000.0,
+      "cash": 1000000.0,
+      "unsettled_cash": 0.0,
+      "holdings_value": 0.0,
+      "return_pct": 0.0,
+      "drawdown_pct": 0.0,
+      "market_status": "2026-05-06 不是交易日，沿用 2026-05-05 收盤後狀態"
+    },
+    {
+      "trade_date": "2026-05-06",
+      "portfolio_id": "balanced",
+      "equity": 1000000.0,
+      "cash": 1000000.0,
+      "unsettled_cash": 0.0,
+      "holdings_value": 0.0,
+      "return_pct": 0.0,
+      "drawdown_pct": 0.0,
+      "market_status": "2026-05-06 不是交易日，沿用 2026-05-05 收盤後狀態"
+    },
+    {
+      "trade_date": "2026-05-06",
+      "portfolio_id": "conservative",
+      "equity": 1000000.0,
+      "cash": 1000000.0,
+      "unsettled_cash": 0.0,
+      "holdings_value": 0.0,
+      "return_pct": 0.0,
+      "drawdown_pct": 0.0,
+      "market_status": "2026-05-06 不是交易日，沿用 2026-05-05 收盤後狀態"
+    }
+  ],
+  "positions": [],
+  "orders": [],
+  "trade_count": 0,
+  "policy_violation_count": 0,
+  "latest_analysis": [],
+  "market_status": {
+    "is_trading_day": false,
+    "as_of": "2026-05-06",
+    "source": "TWSE FMTQIK",
+    "note": "2026-05-06 不是交易日，沿用 2026-05-05 收盤後狀態",
+    "warnings": [],
+    "last_trading_date": "2026-05-05"
+  }
+}
