@@ -56,6 +56,41 @@ class SectorRecommendationTests(unittest.TestCase):
         )
         self.assertNotEqual(rec["recommendation"], "買入")
 
+    def test_macro_overlay_raises_risk_without_upgrading_recommendation(self) -> None:
+        base_row = {
+            "symbol": "2330",
+            "as_of": "2026-03-12",
+            "close": 800.0,
+            "idea_score": 78.0,
+            "confidence_score": 82.0,
+            "trend_score": 75.0,
+            "momentum_score": 72.0,
+            "value_score": 55.0,
+            "fundamental_score": 66.0,
+            "quality_score": 70.0,
+            "benchmark_score": 68.0,
+            "risk_control_score": 78.0,
+            "volatility20": 22.0,
+            "data_quality_flags": [],
+        }
+        base = build_sector_recommendation(base_row)
+        stressed = build_sector_recommendation(
+            {
+                **base_row,
+                "macro_regime_overlay": {
+                    "risk_adjustment": 20.0,
+                    "evidence_refs": ["macro_regime_overlay"],
+                    "rank_signal": False,
+                    "risk_level": "elevated",
+                },
+            }
+        )
+
+        self.assertGreater(stressed["risk_score"], base["risk_score"])
+        self.assertIn("macro_regime_overlay", stressed["evidence_refs"])
+        self.assertFalse(stressed["macro_regime_overlay"]["rank_signal"])
+        self.assertNotEqual(stressed["recommendation"], "買入")
+
     def test_decision_ledger(self) -> None:
         payload = {
             "symbol": "2330",

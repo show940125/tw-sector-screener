@@ -1,0 +1,68 @@
+name: daily-dashboard
+
+on:
+  workflow_dispatch:
+    inputs:
+      as_of:
+        description: "Run date, YYYY-MM-DD or today"
+        required: false
+        default: "today"
+  schedule:
+    # 18:30 Asia/Taipei, Monday-Friday.
+    - cron: "30 10 * * 1-5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages-dashboard
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run daily simulator
+        env:
+          AS_OF: ${{ github.event.inputs.as_of || 'today' }}
+        run: |
+          python scripts/tw_sector_investment_simulator.py \
+            --mode daily \
+            --themes AI,半導體 \
+            --universe-mode coverage \
+            --as-of "$AS_OF" \
+            --initial-cash 1000000 \
+            --top-n 20 \
+            --recommendation-mode deterministic \
+            --analysis-cache reuse \
+            --config simulator.config.example.json \
+            --output-root "$RUNNER_TEMP/tw-sector-screener-output"
+
+      - name: Stage Pages dashboard
+        env:
+          AS_OF: ${{ github.event.inputs.as_of || 'today' }}
+        run: |
+          RUN_DIR="$RUNNER_TEMP/tw-sector-screener-output/simulations/daily-AI-半導體"
+          python scripts/publish_pages_dashboard.py \
+            --run-dir "$RUN_DIR" \
+            --site-dir "$RUNNER_TEMP/pages-site" \
+            --date "$AS_OF" \
+            --base-url "https://show940125.github.io/tw-sector-screener"
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ${{ runner.temp }}/pages-site
+          keep_files: true
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com

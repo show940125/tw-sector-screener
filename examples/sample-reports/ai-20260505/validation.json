@@ -1,0 +1,1539 @@
+{
+  "mode": "validation_report_v3",
+  "base_mode": "factor_aware_cross_sectional_v2",
+  "window": "1y",
+  "rebalance": "monthly",
+  "cost_bps": 10.0,
+  "metrics": {
+    "rebalance_count": 11,
+    "strategy_total_return_pct": 255.07,
+    "benchmark_total_return_pct": 49.7,
+    "basket_total_return_pct": 124.97,
+    "excess_return_pct": 205.37,
+    "cost_adjusted_return_pct": 255.07,
+    "max_drawdown_pct": -0.85,
+    "annualized_volatility_pct": 26.43,
+    "turnover_pct": 34.1,
+    "hit_rate": 0.6864,
+    "portfolio_diagnostics": {
+      "status": "ok",
+      "period_count": 11,
+      "var95_pct": -0.4416,
+      "cvar95_pct": -0.8517,
+      "ulcer_index": 0.246,
+      "omega_ratio": 157.852,
+      "tail_ratio": 58.9274,
+      "rolling_sharpe": [
+        {
+          "date": "2026-03-24",
+          "value": 20.3896
+        }
+      ],
+      "rolling_volatility": [
+        {
+          "date": "2026-03-24",
+          "value": 155.6647
+        }
+      ],
+      "rolling_drawdown": [
+        {
+          "date": "2025-04-11",
+          "value": 0.0
+        },
+        {
+          "date": "2025-05-13",
+          "value": 0.0
+        },
+        {
+          "date": "2025-06-12",
+          "value": 0.0
+        },
+        {
+          "date": "2025-07-11",
+          "value": -0.8517
+        },
+        {
+          "date": "2025-08-11",
+          "value": 0.0
+        },
+        {
+          "date": "2025-09-09",
+          "value": 0.0
+        },
+        {
+          "date": "2025-10-13",
+          "value": 0.0
+        },
+        {
+          "date": "2025-11-12",
+          "value": 0.0
+        },
+        {
+          "date": "2025-12-11",
+          "value": -0.0315
+        },
+        {
+          "date": "2026-01-13",
+          "value": 0.0
+        },
+        {
+          "date": "2026-02-11",
+          "value": 0.0
+        },
+        {
+          "date": "2026-03-24",
+          "value": 0.0
+        }
+      ],
+      "alpha_pct": 2758.9074,
+      "beta": 0.4312,
+      "information_ratio": 14.0173,
+      "tracking_error_pct": 157.7675,
+      "benchmark_status": "ok"
+    },
+    "factor_sleeves": {
+      "price": {
+        "rebalance_count": 11,
+        "strategy_total_return_pct": 174.63,
+        "benchmark_total_return_pct": 49.7,
+        "basket_total_return_pct": 124.97,
+        "excess_return_pct": 124.92,
+        "cost_adjusted_return_pct": 174.63,
+        "max_drawdown_pct": -3.04,
+        "annualized_volatility_pct": 22.77,
+        "turnover_pct": 55.26,
+        "hit_rate": 0.6682,
+        "portfolio_diagnostics": {
+          "status": "ok",
+          "period_count": 11,
+          "var95_pct": -1.6674,
+          "cvar95_pct": -3.036,
+          "ulcer_index": 0.8807,
+          "omega_ratio": 33.7096,
+          "tail_ratio": 12.5356,
+          "rolling_sharpe": [
+            {
+              "date": "2026-03-24",
+              "value": 18.632
+            }
+          ],
+          "rolling_volatility": [
+            {
+              "date": "2026-03-24",
+              "value": 134.1163
+            }
+          ],
+          "rolling_drawdown": [
+            {
+              "date": "2025-04-11",
+              "value": 0.0
+            },
+            {
+              "date": "2025-05-13",
+              "value": -3.036
+            },
+            {
+              "date": "2025-06-12",
+              "value": 0.0
+            },
+            {
+              "date": "2025-07-11",
+              "value": 0.0
+            },
+            {
+              "date": "2025-08-11",
+              "value": 0.0
+            },
+            {
+              "date": "2025-09-09",
+              "value": 0.0
+            },
+            {
+              "date": "2025-10-13",
+              "value": 0.0
+            },
+            {
+              "date": "2025-11-12",
+              "value": 0.0
+            },
+            {
+              "date": "2025-12-11",
+              "value": -0.2988
+            },
+            {
+              "date": "2026-01-13",
+              "value": 0.0
+            },
+            {
+              "date": "2026-02-11",
+              "value": 0.0
+            },
+            {
+              "date": "2026-03-24",
+              "value": 0.0
+            }
+          ],
+          "alpha_pct": 2187.0704,
+          "beta": 0.3239,
+          "information_ratio": 10.9535,
+          "tracking_error_pct": 140.2647,
+          "benchmark_status": "ok"
+        }
+      },
+      "fundamental": {
+        "rebalance_count": 11,
+        "strategy_total_return_pct": 213.87,
+        "benchmark_total_return_pct": 49.7,
+        "basket_total_return_pct": 124.97,
+        "excess_return_pct": 164.16,
+        "cost_adjusted_return_pct": 213.87,
+        "max_drawdown_pct": -2.16,
+        "annualized_volatility_pct": 25.48,
+        "turnover_pct": 9.09,
+        "hit_rate": 0.6818,
+        "portfolio_diagnostics": {
+          "status": "ok",
+          "period_count": 11,
+          "var95_pct": -1.3548,
+          "cvar95_pct": -2.1607,
+          "ulcer_index": 0.6436,
+          "omega_ratio": 46.9542,
+          "tail_ratio": 18.5171,
+          "rolling_sharpe": [
+            {
+              "date": "2026-03-24",
+              "value": 19.0052
+            }
+          ],
+          "rolling_volatility": [
+            {
+              "date": "2026-03-24",
+              "value": 150.0961
+            }
+          ],
+          "rolling_drawdown": [
+            {
+              "date": "2025-04-11",
+              "value": 0.0
+            },
+            {
+              "date": "2025-05-13",
+              "value": 0.0
+            },
+            {
+              "date": "2025-06-12",
+              "value": 0.0
+            },
+            {
+              "date": "2025-07-11",
+              "value": -0.5489
+            },
+            {
+              "date": "2025-08-11",
+              "value": 0.0
+            },
+            {
+              "date": "2025-09-09",
+              "value": 0.0
+            },
+            {
+              "date": "2025-10-13",
+              "value": 0.0
+            },
+            {
+              "date": "2025-11-12",
+              "value": 0.0
+            },
+            {
+              "date": "2025-12-11",
+              "value": -2.1607
+            },
+            {
+              "date": "2026-01-13",
+              "value": 0.0
+            },
+            {
+              "date": "2026-02-11",
+              "value": 0.0
+            },
+            {
+              "date": "2026-03-24",
+              "value": 0.0
+            }
+          ],
+          "alpha_pct": 2299.4754,
+          "beta": 0.5747,
+          "information_ratio": 12.7978,
+          "tracking_error_pct": 147.6925,
+          "benchmark_status": "ok"
+        }
+      },
+      "quality": {
+        "rebalance_count": 11,
+        "strategy_total_return_pct": 75.86,
+        "benchmark_total_return_pct": 49.7,
+        "basket_total_return_pct": 124.97,
+        "excess_return_pct": 26.16,
+        "cost_adjusted_return_pct": 75.86,
+        "max_drawdown_pct": -2.47,
+        "annualized_volatility_pct": 12.88,
+        "turnover_pct": 9.09,
+        "hit_rate": 0.6273,
+        "portfolio_diagnostics": {
+          "status": "ok",
+          "period_count": 11,
+          "var95_pct": -1.1121,
+          "cvar95_pct": -2.4699,
+          "ulcer_index": 0.713,
+          "omega_ratio": 24.8925,
+          "tail_ratio": 11.1806,
+          "rolling_sharpe": [
+            {
+              "date": "2026-03-24",
+              "value": 17.8138
+            }
+          ],
+          "rolling_volatility": [
+            {
+              "date": "2026-03-24",
+              "value": 75.8908
+            }
+          ],
+          "rolling_drawdown": [
+            {
+              "date": "2025-04-11",
+              "value": 0.0
+            },
+            {
+              "date": "2025-05-13",
+              "value": 0.0
+            },
+            {
+              "date": "2025-06-12",
+              "value": 0.0
+            },
+            {
+              "date": "2025-07-11",
+              "value": 0.0
+            },
+            {
+              "date": "2025-08-11",
+              "value": 0.0
+            },
+            {
+              "date": "2025-09-09",
+              "value": 0.0
+            },
+            {
+              "date": "2025-10-13",
+              "value": 0.0
+            },
+            {
+              "date": "2025-11-12",
+              "value": 0.0
+            },
+            {
+              "date": "2025-12-11",
+              "value": 0.0
+            },
+            {
+              "date": "2026-01-13",
+              "value": 0.0
+            },
+            {
+              "date": "2026-02-11",
+              "value": 0.0
+            },
+            {
+              "date": "2026-03-24",
+              "value": -2.4699
+            }
+          ],
+          "alpha_pct": 888.4666,
+          "beta": 0.4815,
+          "information_ratio": 5.0545,
+          "tracking_error_pct": 77.0491,
+          "benchmark_status": "ok"
+        }
+      }
+    },
+    "factor_attribution": {
+      "price": {
+        "avg_selected_score": 34.59,
+        "avg_universe_score": 13.01,
+        "selection_edge": 21.58
+      },
+      "fundamental": {
+        "avg_selected_score": 75.02,
+        "avg_universe_score": 38.93,
+        "selection_edge": 36.09
+      },
+      "quality": {
+        "avg_selected_score": 0.0,
+        "avg_universe_score": 0.0,
+        "selection_edge": 0.0
+      }
+    }
+  },
+  "windows": {
+    "1y": {
+      "status": "ok",
+      "metrics": {
+        "rebalance_count": 11,
+        "strategy_total_return_pct": 255.07,
+        "benchmark_total_return_pct": 49.7,
+        "basket_total_return_pct": 124.97,
+        "excess_return_pct": 205.37,
+        "cost_adjusted_return_pct": 255.07,
+        "max_drawdown_pct": -0.85,
+        "annualized_volatility_pct": 26.43,
+        "turnover_pct": 34.1,
+        "hit_rate": 0.6864,
+        "portfolio_diagnostics": {
+          "status": "ok",
+          "period_count": 11,
+          "var95_pct": -0.4416,
+          "cvar95_pct": -0.8517,
+          "ulcer_index": 0.246,
+          "omega_ratio": 157.852,
+          "tail_ratio": 58.9274,
+          "rolling_sharpe": [
+            {
+              "date": "2026-03-24",
+              "value": 20.3896
+            }
+          ],
+          "rolling_volatility": [
+            {
+              "date": "2026-03-24",
+              "value": 155.6647
+            }
+          ],
+          "rolling_drawdown": [
+            {
+              "date": "2025-04-11",
+              "value": 0.0
+            },
+            {
+              "date": "2025-05-13",
+              "value": 0.0
+            },
+            {
+              "date": "2025-06-12",
+              "value": 0.0
+            },
+            {
+              "date": "2025-07-11",
+              "value": -0.8517
+            },
+            {
+              "date": "2025-08-11",
+              "value": 0.0
+            },
+            {
+              "date": "2025-09-09",
+              "value": 0.0
+            },
+            {
+              "date": "2025-10-13",
+              "value": 0.0
+            },
+            {
+              "date": "2025-11-12",
+              "value": 0.0
+            },
+            {
+              "date": "2025-12-11",
+              "value": -0.0315
+            },
+            {
+              "date": "2026-01-13",
+              "value": 0.0
+            },
+            {
+              "date": "2026-02-11",
+              "value": 0.0
+            },
+            {
+              "date": "2026-03-24",
+              "value": 0.0
+            }
+          ],
+          "alpha_pct": 2758.9074,
+          "beta": 0.4312,
+          "information_ratio": 14.0173,
+          "tracking_error_pct": 157.7675,
+          "benchmark_status": "ok"
+        },
+        "factor_sleeves": {
+          "price": {
+            "rebalance_count": 11,
+            "strategy_total_return_pct": 174.63,
+            "benchmark_total_return_pct": 49.7,
+            "basket_total_return_pct": 124.97,
+            "excess_return_pct": 124.92,
+            "cost_adjusted_return_pct": 174.63,
+            "max_drawdown_pct": -3.04,
+            "annualized_volatility_pct": 22.77,
+            "turnover_pct": 55.26,
+            "hit_rate": 0.6682,
+            "portfolio_diagnostics": {
+              "status": "ok",
+              "period_count": 11,
+              "var95_pct": -1.6674,
+              "cvar95_pct": -3.036,
+              "ulcer_index": 0.8807,
+              "omega_ratio": 33.7096,
+              "tail_ratio": 12.5356,
+              "rolling_sharpe": [
+                {
+                  "date": "2026-03-24",
+                  "value": 18.632
+                }
+              ],
+              "rolling_volatility": [
+                {
+                  "date": "2026-03-24",
+                  "value": 134.1163
+                }
+              ],
+              "rolling_drawdown": [
+                {
+                  "date": "2025-04-11",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-05-13",
+                  "value": -3.036
+                },
+                {
+                  "date": "2025-06-12",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-07-11",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-08-11",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-09-09",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-10-13",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-11-12",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-12-11",
+                  "value": -0.2988
+                },
+                {
+                  "date": "2026-01-13",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-02-11",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-03-24",
+                  "value": 0.0
+                }
+              ],
+              "alpha_pct": 2187.0704,
+              "beta": 0.3239,
+              "information_ratio": 10.9535,
+              "tracking_error_pct": 140.2647,
+              "benchmark_status": "ok"
+            }
+          },
+          "fundamental": {
+            "rebalance_count": 11,
+            "strategy_total_return_pct": 213.87,
+            "benchmark_total_return_pct": 49.7,
+            "basket_total_return_pct": 124.97,
+            "excess_return_pct": 164.16,
+            "cost_adjusted_return_pct": 213.87,
+            "max_drawdown_pct": -2.16,
+            "annualized_volatility_pct": 25.48,
+            "turnover_pct": 9.09,
+            "hit_rate": 0.6818,
+            "portfolio_diagnostics": {
+              "status": "ok",
+              "period_count": 11,
+              "var95_pct": -1.3548,
+              "cvar95_pct": -2.1607,
+              "ulcer_index": 0.6436,
+              "omega_ratio": 46.9542,
+              "tail_ratio": 18.5171,
+              "rolling_sharpe": [
+                {
+                  "date": "2026-03-24",
+                  "value": 19.0052
+                }
+              ],
+              "rolling_volatility": [
+                {
+                  "date": "2026-03-24",
+                  "value": 150.0961
+                }
+              ],
+              "rolling_drawdown": [
+                {
+                  "date": "2025-04-11",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-05-13",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-06-12",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-07-11",
+                  "value": -0.5489
+                },
+                {
+                  "date": "2025-08-11",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-09-09",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-10-13",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-11-12",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-12-11",
+                  "value": -2.1607
+                },
+                {
+                  "date": "2026-01-13",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-02-11",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-03-24",
+                  "value": 0.0
+                }
+              ],
+              "alpha_pct": 2299.4754,
+              "beta": 0.5747,
+              "information_ratio": 12.7978,
+              "tracking_error_pct": 147.6925,
+              "benchmark_status": "ok"
+            }
+          },
+          "quality": {
+            "rebalance_count": 11,
+            "strategy_total_return_pct": 75.86,
+            "benchmark_total_return_pct": 49.7,
+            "basket_total_return_pct": 124.97,
+            "excess_return_pct": 26.16,
+            "cost_adjusted_return_pct": 75.86,
+            "max_drawdown_pct": -2.47,
+            "annualized_volatility_pct": 12.88,
+            "turnover_pct": 9.09,
+            "hit_rate": 0.6273,
+            "portfolio_diagnostics": {
+              "status": "ok",
+              "period_count": 11,
+              "var95_pct": -1.1121,
+              "cvar95_pct": -2.4699,
+              "ulcer_index": 0.713,
+              "omega_ratio": 24.8925,
+              "tail_ratio": 11.1806,
+              "rolling_sharpe": [
+                {
+                  "date": "2026-03-24",
+                  "value": 17.8138
+                }
+              ],
+              "rolling_volatility": [
+                {
+                  "date": "2026-03-24",
+                  "value": 75.8908
+                }
+              ],
+              "rolling_drawdown": [
+                {
+                  "date": "2025-04-11",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-05-13",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-06-12",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-07-11",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-08-11",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-09-09",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-10-13",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-11-12",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-12-11",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-01-13",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-02-11",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-03-24",
+                  "value": -2.4699
+                }
+              ],
+              "alpha_pct": 888.4666,
+              "beta": 0.4815,
+              "information_ratio": 5.0545,
+              "tracking_error_pct": 77.0491,
+              "benchmark_status": "ok"
+            }
+          }
+        },
+        "factor_attribution": {
+          "price": {
+            "avg_selected_score": 34.59,
+            "avg_universe_score": 13.01,
+            "selection_edge": 21.58
+          },
+          "fundamental": {
+            "avg_selected_score": 75.02,
+            "avg_universe_score": 38.93,
+            "selection_edge": 36.09
+          },
+          "quality": {
+            "avg_selected_score": 0.0,
+            "avg_universe_score": 0.0,
+            "selection_edge": 0.0
+          }
+        }
+      }
+    },
+    "3y": {
+      "status": "ok",
+      "metrics": {
+        "rebalance_count": 12,
+        "strategy_total_return_pct": 197.23,
+        "benchmark_total_return_pct": 30.22,
+        "basket_total_return_pct": 89.15,
+        "excess_return_pct": 167.01,
+        "cost_adjusted_return_pct": 197.23,
+        "max_drawdown_pct": -13.97,
+        "annualized_volatility_pct": 33.21,
+        "turnover_pct": 33.73,
+        "hit_rate": 0.65,
+        "portfolio_diagnostics": {
+          "status": "ok",
+          "period_count": 12,
+          "var95_pct": -6.515,
+          "cvar95_pct": -13.9707,
+          "ulcer_index": 4.5661,
+          "omega_ratio": 9.4561,
+          "tail_ratio": 4.3863,
+          "rolling_sharpe": [
+            {
+              "date": "2026-04-07",
+              "value": 13.0525
+            }
+          ],
+          "rolling_volatility": [
+            {
+              "date": "2026-04-07",
+              "value": 195.715
+            }
+          ],
+          "rolling_drawdown": [
+            {
+              "date": "2025-03-21",
+              "value": 0.0
+            },
+            {
+              "date": "2025-04-23",
+              "value": -13.9707
+            },
+            {
+              "date": "2025-05-23",
+              "value": -8.7
+            },
+            {
+              "date": "2025-06-24",
+              "value": 0.0
+            },
+            {
+              "date": "2025-07-23",
+              "value": -0.4149
+            },
+            {
+              "date": "2025-08-21",
+              "value": 0.0
+            },
+            {
+              "date": "2025-09-19",
+              "value": 0.0
+            },
+            {
+              "date": "2025-10-23",
+              "value": 0.0
+            },
+            {
+              "date": "2025-11-24",
+              "value": 0.0
+            },
+            {
+              "date": "2025-12-23",
+              "value": 0.0
+            },
+            {
+              "date": "2026-01-23",
+              "value": 0.0
+            },
+            {
+              "date": "2026-03-05",
+              "value": 0.0
+            },
+            {
+              "date": "2026-04-07",
+              "value": 0.0
+            }
+          ],
+          "alpha_pct": 1895.3757,
+          "beta": 1.0815,
+          "information_ratio": 12.086,
+          "tracking_error_pct": 160.935,
+          "benchmark_status": "ok"
+        },
+        "factor_sleeves": {
+          "price": {
+            "rebalance_count": 12,
+            "strategy_total_return_pct": 144.93,
+            "benchmark_total_return_pct": 30.22,
+            "basket_total_return_pct": 89.15,
+            "excess_return_pct": 114.71,
+            "cost_adjusted_return_pct": 144.93,
+            "max_drawdown_pct": -14.47,
+            "annualized_volatility_pct": 30.69,
+            "turnover_pct": 50.67,
+            "hit_rate": 0.6292,
+            "portfolio_diagnostics": {
+              "status": "ok",
+              "period_count": 12,
+              "var95_pct": -7.1932,
+              "cvar95_pct": -10.2945,
+              "ulcer_index": 5.2037,
+              "omega_ratio": 7.6519,
+              "tail_ratio": 3.5267,
+              "rolling_sharpe": [
+                {
+                  "date": "2026-04-07",
+                  "value": 11.548
+                }
+              ],
+              "rolling_volatility": [
+                {
+                  "date": "2026-04-07",
+                  "value": 180.8456
+                }
+              ],
+              "rolling_drawdown": [
+                {
+                  "date": "2025-03-21",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-04-23",
+                  "value": -10.2945
+                },
+                {
+                  "date": "2025-05-23",
+                  "value": -14.471
+                },
+                {
+                  "date": "2025-06-24",
+                  "value": -4.9445
+                },
+                {
+                  "date": "2025-07-23",
+                  "value": -3.4915
+                },
+                {
+                  "date": "2025-08-21",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-09-19",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-10-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-11-24",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-12-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-01-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-03-05",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-04-07",
+                  "value": 0.0
+                }
+              ],
+              "alpha_pct": 1555.4958,
+              "beta": 0.8743,
+              "information_ratio": 9.406,
+              "tracking_error_pct": 157.2282,
+              "benchmark_status": "ok"
+            }
+          },
+          "fundamental": {
+            "rebalance_count": 12,
+            "strategy_total_return_pct": 150.36,
+            "benchmark_total_return_pct": 30.22,
+            "basket_total_return_pct": 89.15,
+            "excess_return_pct": 120.14,
+            "cost_adjusted_return_pct": 150.36,
+            "max_drawdown_pct": -15.34,
+            "annualized_volatility_pct": 28.83,
+            "turnover_pct": 8.33,
+            "hit_rate": 0.6333,
+            "portfolio_diagnostics": {
+              "status": "ok",
+              "period_count": 12,
+              "var95_pct": -6.6211,
+              "cvar95_pct": -15.341,
+              "ulcer_index": 4.7487,
+              "omega_ratio": 7.611,
+              "tail_ratio": 3.5591,
+              "rolling_sharpe": [
+                {
+                  "date": "2026-04-07",
+                  "value": 12.5345
+                }
+              ],
+              "rolling_volatility": [
+                {
+                  "date": "2026-04-07",
+                  "value": 169.9155
+                }
+              ],
+              "rolling_drawdown": [
+                {
+                  "date": "2025-03-21",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-04-23",
+                  "value": -15.341
+                },
+                {
+                  "date": "2025-05-23",
+                  "value": -7.603
+                },
+                {
+                  "date": "2025-06-24",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-07-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-08-21",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-09-19",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-10-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-11-24",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-12-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-01-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-03-05",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-04-07",
+                  "value": 0.0
+                }
+              ],
+              "alpha_pct": 1519.6253,
+              "beta": 1.0011,
+              "information_ratio": 11.2746,
+              "tracking_error_pct": 134.8419,
+              "benchmark_status": "ok"
+            }
+          },
+          "quality": {
+            "rebalance_count": 12,
+            "strategy_total_return_pct": 51.78,
+            "benchmark_total_return_pct": 30.22,
+            "basket_total_return_pct": 89.15,
+            "excess_return_pct": 21.56,
+            "cost_adjusted_return_pct": 51.78,
+            "max_drawdown_pct": -9.12,
+            "annualized_volatility_pct": 19.53,
+            "turnover_pct": 8.33,
+            "hit_rate": 0.5583,
+            "portfolio_diagnostics": {
+              "status": "ok",
+              "period_count": 12,
+              "var95_pct": -6.1356,
+              "cvar95_pct": -9.1235,
+              "ulcer_index": 3.3389,
+              "omega_ratio": 4.3735,
+              "tail_ratio": 2.4911,
+              "rolling_sharpe": [
+                {
+                  "date": "2026-04-07",
+                  "value": 8.2528
+                }
+              ],
+              "rolling_volatility": [
+                {
+                  "date": "2026-04-07",
+                  "value": 115.0747
+                }
+              ],
+              "rolling_drawdown": [
+                {
+                  "date": "2025-03-21",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-04-23",
+                  "value": -9.1235
+                },
+                {
+                  "date": "2025-05-23",
+                  "value": -6.9077
+                },
+                {
+                  "date": "2025-06-24",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-07-23",
+                  "value": -0.5908
+                },
+                {
+                  "date": "2025-08-21",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-09-19",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-10-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-11-24",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-12-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-01-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-03-05",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-04-07",
+                  "value": -3.6909
+                }
+              ],
+              "alpha_pct": 516.9066,
+              "beta": 0.71,
+              "information_ratio": 3.6341,
+              "tracking_error_pct": 93.6048,
+              "benchmark_status": "ok"
+            }
+          }
+        },
+        "factor_attribution": {
+          "price": {
+            "avg_selected_score": 31.25,
+            "avg_universe_score": 11.75,
+            "selection_edge": 19.5
+          },
+          "fundamental": {
+            "avg_selected_score": 75.02,
+            "avg_universe_score": 38.93,
+            "selection_edge": 36.09
+          },
+          "quality": {
+            "avg_selected_score": 0.0,
+            "avg_universe_score": 0.0,
+            "selection_edge": 0.0
+          }
+        }
+      }
+    },
+    "5y": {
+      "status": "ok",
+      "metrics": {
+        "rebalance_count": 12,
+        "strategy_total_return_pct": 197.23,
+        "benchmark_total_return_pct": 30.22,
+        "basket_total_return_pct": 89.15,
+        "excess_return_pct": 167.01,
+        "cost_adjusted_return_pct": 197.23,
+        "max_drawdown_pct": -13.97,
+        "annualized_volatility_pct": 33.21,
+        "turnover_pct": 33.73,
+        "hit_rate": 0.65,
+        "portfolio_diagnostics": {
+          "status": "ok",
+          "period_count": 12,
+          "var95_pct": -6.515,
+          "cvar95_pct": -13.9707,
+          "ulcer_index": 4.5661,
+          "omega_ratio": 9.4561,
+          "tail_ratio": 4.3863,
+          "rolling_sharpe": [
+            {
+              "date": "2026-04-07",
+              "value": 13.0525
+            }
+          ],
+          "rolling_volatility": [
+            {
+              "date": "2026-04-07",
+              "value": 195.715
+            }
+          ],
+          "rolling_drawdown": [
+            {
+              "date": "2025-03-21",
+              "value": 0.0
+            },
+            {
+              "date": "2025-04-23",
+              "value": -13.9707
+            },
+            {
+              "date": "2025-05-23",
+              "value": -8.7
+            },
+            {
+              "date": "2025-06-24",
+              "value": 0.0
+            },
+            {
+              "date": "2025-07-23",
+              "value": -0.4149
+            },
+            {
+              "date": "2025-08-21",
+              "value": 0.0
+            },
+            {
+              "date": "2025-09-19",
+              "value": 0.0
+            },
+            {
+              "date": "2025-10-23",
+              "value": 0.0
+            },
+            {
+              "date": "2025-11-24",
+              "value": 0.0
+            },
+            {
+              "date": "2025-12-23",
+              "value": 0.0
+            },
+            {
+              "date": "2026-01-23",
+              "value": 0.0
+            },
+            {
+              "date": "2026-03-05",
+              "value": 0.0
+            },
+            {
+              "date": "2026-04-07",
+              "value": 0.0
+            }
+          ],
+          "alpha_pct": 1895.3757,
+          "beta": 1.0815,
+          "information_ratio": 12.086,
+          "tracking_error_pct": 160.935,
+          "benchmark_status": "ok"
+        },
+        "factor_sleeves": {
+          "price": {
+            "rebalance_count": 12,
+            "strategy_total_return_pct": 144.93,
+            "benchmark_total_return_pct": 30.22,
+            "basket_total_return_pct": 89.15,
+            "excess_return_pct": 114.71,
+            "cost_adjusted_return_pct": 144.93,
+            "max_drawdown_pct": -14.47,
+            "annualized_volatility_pct": 30.69,
+            "turnover_pct": 50.67,
+            "hit_rate": 0.6292,
+            "portfolio_diagnostics": {
+              "status": "ok",
+              "period_count": 12,
+              "var95_pct": -7.1932,
+              "cvar95_pct": -10.2945,
+              "ulcer_index": 5.2037,
+              "omega_ratio": 7.6519,
+              "tail_ratio": 3.5267,
+              "rolling_sharpe": [
+                {
+                  "date": "2026-04-07",
+                  "value": 11.548
+                }
+              ],
+              "rolling_volatility": [
+                {
+                  "date": "2026-04-07",
+                  "value": 180.8456
+                }
+              ],
+              "rolling_drawdown": [
+                {
+                  "date": "2025-03-21",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-04-23",
+                  "value": -10.2945
+                },
+                {
+                  "date": "2025-05-23",
+                  "value": -14.471
+                },
+                {
+                  "date": "2025-06-24",
+                  "value": -4.9445
+                },
+                {
+                  "date": "2025-07-23",
+                  "value": -3.4915
+                },
+                {
+                  "date": "2025-08-21",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-09-19",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-10-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-11-24",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-12-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-01-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-03-05",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-04-07",
+                  "value": 0.0
+                }
+              ],
+              "alpha_pct": 1555.4958,
+              "beta": 0.8743,
+              "information_ratio": 9.406,
+              "tracking_error_pct": 157.2282,
+              "benchmark_status": "ok"
+            }
+          },
+          "fundamental": {
+            "rebalance_count": 12,
+            "strategy_total_return_pct": 150.36,
+            "benchmark_total_return_pct": 30.22,
+            "basket_total_return_pct": 89.15,
+            "excess_return_pct": 120.14,
+            "cost_adjusted_return_pct": 150.36,
+            "max_drawdown_pct": -15.34,
+            "annualized_volatility_pct": 28.83,
+            "turnover_pct": 8.33,
+            "hit_rate": 0.6333,
+            "portfolio_diagnostics": {
+              "status": "ok",
+              "period_count": 12,
+              "var95_pct": -6.6211,
+              "cvar95_pct": -15.341,
+              "ulcer_index": 4.7487,
+              "omega_ratio": 7.611,
+              "tail_ratio": 3.5591,
+              "rolling_sharpe": [
+                {
+                  "date": "2026-04-07",
+                  "value": 12.5345
+                }
+              ],
+              "rolling_volatility": [
+                {
+                  "date": "2026-04-07",
+                  "value": 169.9155
+                }
+              ],
+              "rolling_drawdown": [
+                {
+                  "date": "2025-03-21",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-04-23",
+                  "value": -15.341
+                },
+                {
+                  "date": "2025-05-23",
+                  "value": -7.603
+                },
+                {
+                  "date": "2025-06-24",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-07-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-08-21",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-09-19",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-10-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-11-24",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-12-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-01-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-03-05",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-04-07",
+                  "value": 0.0
+                }
+              ],
+              "alpha_pct": 1519.6253,
+              "beta": 1.0011,
+              "information_ratio": 11.2746,
+              "tracking_error_pct": 134.8419,
+              "benchmark_status": "ok"
+            }
+          },
+          "quality": {
+            "rebalance_count": 12,
+            "strategy_total_return_pct": 51.78,
+            "benchmark_total_return_pct": 30.22,
+            "basket_total_return_pct": 89.15,
+            "excess_return_pct": 21.56,
+            "cost_adjusted_return_pct": 51.78,
+            "max_drawdown_pct": -9.12,
+            "annualized_volatility_pct": 19.53,
+            "turnover_pct": 8.33,
+            "hit_rate": 0.5583,
+            "portfolio_diagnostics": {
+              "status": "ok",
+              "period_count": 12,
+              "var95_pct": -6.1356,
+              "cvar95_pct": -9.1235,
+              "ulcer_index": 3.3389,
+              "omega_ratio": 4.3735,
+              "tail_ratio": 2.4911,
+              "rolling_sharpe": [
+                {
+                  "date": "2026-04-07",
+                  "value": 8.2528
+                }
+              ],
+              "rolling_volatility": [
+                {
+                  "date": "2026-04-07",
+                  "value": 115.0747
+                }
+              ],
+              "rolling_drawdown": [
+                {
+                  "date": "2025-03-21",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-04-23",
+                  "value": -9.1235
+                },
+                {
+                  "date": "2025-05-23",
+                  "value": -6.9077
+                },
+                {
+                  "date": "2025-06-24",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-07-23",
+                  "value": -0.5908
+                },
+                {
+                  "date": "2025-08-21",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-09-19",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-10-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-11-24",
+                  "value": 0.0
+                },
+                {
+                  "date": "2025-12-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-01-23",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-03-05",
+                  "value": 0.0
+                },
+                {
+                  "date": "2026-04-07",
+                  "value": -3.6909
+                }
+              ],
+              "alpha_pct": 516.9066,
+              "beta": 0.71,
+              "information_ratio": 3.6341,
+              "tracking_error_pct": 93.6048,
+              "benchmark_status": "ok"
+            }
+          }
+        },
+        "factor_attribution": {
+          "price": {
+            "avg_selected_score": 31.25,
+            "avg_universe_score": 11.75,
+            "selection_edge": 19.5
+          },
+          "fundamental": {
+            "avg_selected_score": 75.02,
+            "avg_universe_score": 38.93,
+            "selection_edge": 36.09
+          },
+          "quality": {
+            "avg_selected_score": 0.0,
+            "avg_universe_score": 0.0,
+            "selection_edge": 0.0
+          }
+        }
+      }
+    }
+  },
+  "limitations": [
+    "價格因子使用歷史日線做 point-in-time 驗證；基本面與品質因子目前仍偏向快照型訊號。",
+    "季度品質資料已接最新季與 SQLite 歷史累積，但更長歷史仍需持續刷新補厚。",
+    "C / D / E 仍待優化：theme coverage expansion、workflow deepening、action engine upgrade。"
+  ]
+}

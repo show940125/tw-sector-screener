@@ -1,0 +1,1687 @@
+{
+  "theme": "AI",
+  "as_of": "2026-04-30",
+  "recommendation_mode": "deterministic",
+  "rows": [
+    {
+      "symbol": "8271",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 86.4,
+      "risk_score": 95.0,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 204.28,
+        "base": 220.0,
+        "high": 235.72,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 5，idea score 77.5。",
+        "bear_case": "主要反方為波動 96.7、risk score 95.0 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "宇瞻",
+      "idea_score": 77.45,
+      "rank_score": 66.92,
+      "close_price": 220.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "2337",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 86.4,
+      "risk_score": 85.78,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 140.6,
+        "base": 154.0,
+        "high": 167.4,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 4，idea score 77.3。",
+        "bear_case": "主要反方為波動 104.4、risk score 85.8 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "旺宏",
+      "idea_score": 77.3,
+      "rank_score": 66.79,
+      "close_price": 154.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "4967",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 95.0,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 261.87,
+        "base": 281.0,
+        "high": 300.13,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 4，idea score 76.1。",
+        "bear_case": "主要反方為波動 75.1、risk score 95.0 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "十銓",
+      "idea_score": 76.13,
+      "rank_score": 62.58,
+      "close_price": 281.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "3260",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 95.0,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 402.7,
+        "base": 436.0,
+        "high": 469.3,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 4，idea score 75.3。",
+        "bear_case": "主要反方為波動 88.2、risk score 95.0 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "威剛",
+      "idea_score": 75.29,
+      "rank_score": 61.89,
+      "close_price": 436.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "2451",
+      "as_of": "2026-04-30",
+      "recommendation": "賣出",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 92.85,
+      "action_view": "賣出/移出觀察",
+      "target_range": {
+        "low": 216.24,
+        "base": 234.37,
+        "high": 252.5,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 0.0,
+        "batch_plan": "已有部位先減碼，跌破失效條件時移出觀察。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "重新站回 SMA20/SMA60 且風險分數下降後再評估"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 3，idea score 69.8。",
+        "bear_case": "主要反方為波動 60.8、risk score 92.9 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為賣出。"
+      },
+      "theme": "AI",
+      "name": "創見",
+      "idea_score": 69.85,
+      "rank_score": 57.42,
+      "close_price": 252.5,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "3017",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 77.11,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 2680.1,
+        "base": 2835.0,
+        "high": 2989.9,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 4，idea score 69.0。",
+        "bear_case": "主要反方為波動 61.8、risk score 77.1 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "奇鋐",
+      "idea_score": 69.05,
+      "rank_score": 56.76,
+      "close_price": 2835.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "6274",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 95.0,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 954.65,
+        "base": 1010.0,
+        "high": 1065.35,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 4，idea score 68.7。",
+        "bear_case": "主要反方為波動 76.2、risk score 95.0 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "台燿",
+      "idea_score": 68.67,
+      "rank_score": 56.45,
+      "close_price": 1010.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "2356",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 66.52,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 44.32,
+        "base": 45.9,
+        "high": 47.48,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 3，idea score 68.1。",
+        "bear_case": "主要反方為波動 29.9、risk score 66.5 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "英業達",
+      "idea_score": 68.13,
+      "rank_score": 56.0,
+      "close_price": 45.9,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "8996",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 95.0,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 1158.48,
+        "base": 1250.0,
+        "high": 1341.52,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 4，idea score 67.8。",
+        "bear_case": "主要反方為波動 80.6、risk score 95.0 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "高力",
+      "idea_score": 67.8,
+      "rank_score": 55.73,
+      "close_price": 1250.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "6147",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 85.2,
+      "risk_score": 95.0,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 151.16,
+        "base": 163.0,
+        "high": 174.84,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 3，idea score 64.1。",
+        "bear_case": "主要反方為波動 100.2、risk score 95.0 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "頎邦",
+      "idea_score": 64.1,
+      "rank_score": 54.61,
+      "close_price": 163.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "4919",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 95.0,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 137.07,
+        "base": 147.5,
+        "high": 157.93,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 3，idea score 66.1。",
+        "bear_case": "主要反方為波動 90.2、risk score 95.0 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "新唐",
+      "idea_score": 66.09,
+      "rank_score": 54.33,
+      "close_price": 147.5,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "8046",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 81.74,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 945.96,
+        "base": 1005.0,
+        "high": 1064.04,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 4，idea score 65.9。",
+        "bear_case": "主要反方為波動 72.9、risk score 81.7 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "南電",
+      "idea_score": 65.89,
+      "rank_score": 54.16,
+      "close_price": 1005.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "3037",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 86.4,
+      "risk_score": 65.96,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 835.07,
+        "base": 883.0,
+        "high": 930.93,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 3，idea score 62.4。",
+        "bear_case": "主要反方為波動 70.2、risk score 66.0 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "欣興",
+      "idea_score": 62.37,
+      "rank_score": 53.89,
+      "close_price": 883.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "3189",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 81.74,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 493.38,
+        "base": 528.0,
+        "high": 562.62,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 3，idea score 65.5。",
+        "bear_case": "主要反方為波動 71.7、risk score 81.7 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "景碩",
+      "idea_score": 65.55,
+      "rank_score": 53.88,
+      "close_price": 528.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "3526",
+      "as_of": "2026-04-30",
+      "recommendation": "賣出",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 95.0,
+      "action_view": "賣出/移出觀察",
+      "target_range": {
+        "low": 303.19,
+        "base": 316.6,
+        "high": 330.0,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 0.0,
+        "batch_plan": "已有部位先減碼，跌破失效條件時移出觀察。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "重新站回 SMA20/SMA60 且風險分數下降後再評估"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 3，idea score 65.3。",
+        "bear_case": "主要反方為波動 57.8、risk score 95.0 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為賣出。"
+      },
+      "theme": "AI",
+      "name": "凡甲",
+      "idea_score": 65.35,
+      "rank_score": 53.72,
+      "close_price": 330.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "3006",
+      "as_of": "2026-04-30",
+      "recommendation": "賣出",
+      "recommendation_source": "deterministic",
+      "confidence_score": 86.4,
+      "risk_score": 87.26,
+      "action_view": "賣出/移出觀察",
+      "target_range": {
+        "low": 142.85,
+        "base": 156.17,
+        "high": 169.5,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 0.0,
+        "batch_plan": "已有部位先減碼，跌破失效條件時移出觀察。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "重新站回 SMA20/SMA60 且風險分數下降後再評估"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 2，idea score 61.2。",
+        "bear_case": "主要反方為波動 71.7、risk score 87.3 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為賣出。"
+      },
+      "theme": "AI",
+      "name": "晶豪科",
+      "idea_score": 61.18,
+      "rank_score": 52.86,
+      "close_price": 169.5,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "3653",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 95.0,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 5077.8,
+        "base": 5380.0,
+        "high": 5682.2,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 3，idea score 63.9。",
+        "bear_case": "主要反方為波動 75.3、risk score 95.0 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "健策",
+      "idea_score": 63.87,
+      "rank_score": 52.5,
+      "close_price": 5380.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "2454",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 70.63,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 2489.25,
+        "base": 2610.0,
+        "high": 2730.75,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 3，idea score 62.9。",
+        "bear_case": "主要反方為波動 66.9、risk score 70.6 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "聯發科",
+      "idea_score": 62.92,
+      "rank_score": 51.72,
+      "close_price": 2610.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "3711",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 72.48,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 453.52,
+        "base": 478.0,
+        "high": 502.48,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 3，idea score 62.8。",
+        "bear_case": "主要反方為波動 57.7、risk score 72.5 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "日月光投控",
+      "idea_score": 62.76,
+      "rank_score": 51.59,
+      "close_price": 478.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    },
+    {
+      "symbol": "3324",
+      "as_of": "2026-04-30",
+      "recommendation": "持有",
+      "recommendation_source": "deterministic",
+      "confidence_score": 82.2,
+      "risk_score": 95.0,
+      "action_view": "降風險",
+      "target_range": {
+        "low": 1068.73,
+        "base": 1140.0,
+        "high": 1211.27,
+        "basis": "mixed"
+      },
+      "position_note": {
+        "max_position_pct": 2.0,
+        "batch_plan": "只留觀察倉，等趨勢或資料修復。",
+        "risk_budget_pct": 0.4,
+        "stop_reference": "SMA20 / 相對題材動能 / thesis break"
+      },
+      "invalidation_conditions": [
+        "相對題材 20 日動能轉負且無法修復",
+        "confidence 低於 55 或新增重大資料警示",
+        "跌破 SMA60 或 quality coverage 惡化時降級"
+      ],
+      "upgrade_conditions": [
+        "相對大盤與相對題材 20 日動能轉正",
+        "最新季度品質資料補齊且 confidence 回升"
+      ],
+      "evidence_refs": [
+        "trend_score",
+        "momentum_score",
+        "value_score",
+        "fundamental_score",
+        "quality_score",
+        "benchmark_score",
+        "risk_control_score",
+        "data_quality_flags",
+        "market_overview.trend_score",
+        "market_overview.ret_20d",
+        "market_overview.rsi14",
+        "macro_regime_overlay",
+        "macro-regime-local-proxy"
+      ],
+      "macro_regime_overlay": {
+        "tier": "supplementary",
+        "source": "macro-regime-local-proxy",
+        "as_of": "2026-04-30",
+        "freshness": "current",
+        "success": true,
+        "regime": "neutral",
+        "risk_level": "normal",
+        "risk_adjustment": 0.0,
+        "rank_signal": false,
+        "evidence_refs": [
+          "market_overview.trend_score",
+          "market_overview.ret_20d",
+          "market_overview.rsi14",
+          "macro_regime_overlay",
+          "macro-regime-local-proxy"
+        ],
+        "data_quality_flags": [
+          "connector:macro-regime-local-proxy:supplementary"
+        ],
+        "license_hint": "supplementary"
+      },
+      "review_notes": {
+        "bull_case": "支持理由數 3，idea score 62.7。",
+        "bear_case": "主要反方為波動 71.7、risk score 95.0 與資料旗標。",
+        "risk_review": "risk gate 觸發，買入建議已受限制。",
+        "manager_decision": "最後研究建議評估為持有。"
+      },
+      "theme": "AI",
+      "name": "雙鴻",
+      "idea_score": 62.7,
+      "rank_score": 51.54,
+      "close_price": 1140.0,
+      "llm_review": {
+        "enabled": false,
+        "provider": null,
+        "model": null,
+        "status": "not-requested"
+      }
+    }
+  ]
+}

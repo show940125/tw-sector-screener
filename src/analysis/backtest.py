@@ -3,6 +3,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from src.analysis.portfolio_metrics import calculate_portfolio_diagnostics
+
 
 def _pct_return(start: float, end: float) -> float:
     if start == 0:
@@ -60,6 +62,7 @@ def _run_strategy_metrics(
     strategy_curve = [1.0]
     benchmark_curve = [1.0]
     basket_curve = [1.0]
+    curve_dates: list[Any] = [snapshots[0]["rebalance_date"]]
     strategy_period_returns: list[float] = []
     hit_count = 0
     total_picks = 0
@@ -118,10 +121,17 @@ def _run_strategy_metrics(
         else:
             benchmark_return = 0.0
         benchmark_curve.append(benchmark_curve[-1] * (1.0 + benchmark_return))
+        curve_dates.append(next_date)
         days_deltas.append(max((next_date - current_date).days, 1))
 
     avg_days = (sum(days_deltas) / len(days_deltas)) if days_deltas else 7.0
     periods_per_year = 252.0 / avg_days
+    portfolio_diagnostics = calculate_portfolio_diagnostics(
+        [{"date": curve_dates[idx], "equity": value} for idx, value in enumerate(strategy_curve)],
+        benchmark_series=[{"date": curve_dates[idx], "equity": value} for idx, value in enumerate(benchmark_curve)]
+        if len(benchmark_curve) == len(strategy_curve)
+        else None,
+    )
     return {
         "rebalance_count": len(snapshots) - 1,
         "strategy_total_return_pct": round((strategy_curve[-1] - 1.0) * 100.0, 2),
@@ -133,6 +143,7 @@ def _run_strategy_metrics(
         "annualized_volatility_pct": round(_annualized_volatility(strategy_period_returns, periods_per_year), 2),
         "turnover_pct": round((turnover_total / max(len(snapshots) - 1, 1)) * 100.0, 2),
         "hit_rate": round(hit_count / max(total_picks, 1), 4),
+        "portfolio_diagnostics": portfolio_diagnostics,
     }
 
 
