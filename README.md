@@ -366,8 +366,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\publish_latest_da
 
 ## Daily Dashboard Publishing
 
-每日 dashboard 由 GitHub Actions 產生並發布到 GitHub Pages，不提交到 `main`：
-本機 daily automation 會在 simulator 成功產出後呼叫 `publish_latest_dashboard_to_pages.py`，將同一份本機 `daily-AI-半導體` dashboard 同步發布到 GitHub Pages。
+每日 dashboard 以本機 daily automation 的 simulator 產出為準，不提交到 `main`。自動化會在 simulator 成功產出後呼叫 `publish_latest_dashboard_to_pages.py`，將同一份本機 `daily-AI-半導體` dashboard 同步發布到 GitHub Pages。GitHub workflow 只保留手動觸發 / workflow_call 作為備援發布路徑，不另設獨立排程。
 
 - Latest dashboard：[latest/dashboard.html](https://show940125.github.io/tw-sector-screener/latest/dashboard.html)
 - Latest summary：[latest/summary.json](https://show940125.github.io/tw-sector-screener/latest/summary.json)
