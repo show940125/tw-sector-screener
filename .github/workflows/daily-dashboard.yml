@@ -7,9 +7,13 @@ on:
         description: "Run date, YYYY-MM-DD or today"
         required: false
         default: "today"
-  schedule:
-    # 18:30 Asia/Taipei, Monday-Friday.
-    - cron: "30 10 * * 1-5"
+  workflow_call:
+    inputs:
+      as_of:
+        description: "Run date, YYYY-MM-DD or today"
+        required: false
+        default: "today"
+        type: string
 
 permissions:
   contents: write
@@ -32,7 +36,7 @@ jobs:
 
       - name: Run daily simulator
         env:
-          AS_OF: ${{ github.event.inputs.as_of || 'today' }}
+          AS_OF: ${{ inputs.as_of || github.event.inputs.as_of || 'today' }}
         run: |
           python scripts/tw_sector_investment_simulator.py \
             --mode daily \
@@ -48,7 +52,7 @@ jobs:
 
       - name: Stage Pages dashboard
         env:
-          AS_OF: ${{ github.event.inputs.as_of || 'today' }}
+          AS_OF: ${{ inputs.as_of || github.event.inputs.as_of || 'today' }}
         run: |
           RUN_DIR="$RUNNER_TEMP/tw-sector-screener-output/simulations/daily-AI-半導體"
           python scripts/publish_pages_dashboard.py \

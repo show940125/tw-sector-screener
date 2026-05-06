@@ -263,6 +263,9 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investm
   --analysis-cache reuse `
   --config "%USERPROFILE%\.codex\skills\tw-sector-screener\simulator.config.example.json" `
   --output-root "%USERPROFILE%\tw-sector-screener-output"
+
+python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\publish_latest_dashboard_to_pages.py" `
+  --run-dir "%USERPROFILE%\tw-sector-screener-output\simulations\daily-AI-半導體"
 ```
 
 ## CLI Surface
@@ -364,6 +367,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investm
 ## Daily Dashboard Publishing
 
 每日 dashboard 由 GitHub Actions 產生並發布到 GitHub Pages，不提交到 `main`：
+本機 daily automation 會在 simulator 成功產出後呼叫 `publish_latest_dashboard_to_pages.py`，將同一份本機 `daily-AI-半導體` dashboard 同步發布到 GitHub Pages。
 
 - Latest dashboard：[latest/dashboard.html](https://show940125.github.io/tw-sector-screener/latest/dashboard.html)
 - Latest summary：[latest/summary.json](https://show940125.github.io/tw-sector-screener/latest/summary.json)

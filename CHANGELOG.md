@@ -6,14 +6,16 @@
 
 ### Added
 
-- 新增 `daily-dashboard` GitHub Actions workflow，於台北時間週一至週五 18:30 產生每日 simulator dashboard 並發布到 `gh-pages`。
+- 新增 `daily-dashboard` GitHub Actions workflow，可手動觸發或由其他 workflow 呼叫，將 simulator dashboard 發布到 `gh-pages`。
 - 新增 GitHub Pages 靜態輸出入口：`latest/dashboard.html`、`latest/summary.json`、`latest/daily-equity.csv`、`manifest.json` 與 `archive/YYYYMMDD/`。
 - 新增 `scripts/publish_pages_dashboard.py`，負責從 simulator run directory staging dashboard、summary、daily equity 與 Pages index。
+- 新增 `scripts/publish_latest_dashboard_to_pages.py`，讓本機 daily automation 跑完後可直接把正式 `daily-AI-半導體` dashboard 同步發布到 `gh-pages`。
 
 ### Changed
 
 - README 加入 Latest Dashboard 連結與每日 Pages archive 規則。
 - 明確規範完整每日輸出不進 `main`；`examples/sample-reports/` 只保存少量人工挑選樣本。
+- `daily-dashboard` workflow 移除獨立 cron，只保留手動觸發與 workflow_call，避免與本機每日自動化產出不同步。
 
 ## [0.3.0] - 2026-05-05
 
