@@ -1,4 +1,4 @@
 ﻿trade_date,portfolio_id,equity,cash,unsettled_cash,holdings_value,return_pct,drawdown_pct
-2026-05-06,aggressive,1000000.0,1000000.0,0.0,0.0,0.0,0.0
-2026-05-06,balanced,1000000.0,1000000.0,0.0,0.0,0.0,0.0
-2026-05-06,conservative,1000000.0,1000000.0,0.0,0.0,0.0,0.0
+2026-05-05,aggressive,1000000.0,1000000.0,0.0,0.0,0.0,0.0
+2026-05-05,balanced,1000000.0,1000000.0,0.0,0.0,0.0,0.0
+2026-05-05,conservative,1000000.0,1000000.0,0.0,0.0,0.0,0.0

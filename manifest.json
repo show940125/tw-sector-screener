@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-05-06T01:18:52+00:00",
-  "date": "20260506",
-  "run_id": "daily-AI-半導體",
+  "generated_at": "2026-05-06T01:47:35+00:00",
+  "date": "20260505",
+  "run_id": "historical-AI-半導體-20260505-20260505",
   "themes": [
     "AI",
     "半導體"
@@ -12,8 +12,8 @@
     "daily_equity_url": "https://show940125.github.io/tw-sector-screener/latest/daily-equity.csv"
   },
   "archive": {
-    "dashboard_url": "https://show940125.github.io/tw-sector-screener/archive/20260506/dashboard.html",
-    "summary_url": "https://show940125.github.io/tw-sector-screener/archive/20260506/summary.json",
-    "daily_equity_url": "https://show940125.github.io/tw-sector-screener/archive/20260506/daily-equity.csv"
+    "dashboard_url": "https://show940125.github.io/tw-sector-screener/archive/20260505/dashboard.html",
+    "summary_url": "https://show940125.github.io/tw-sector-screener/archive/20260505/summary.json",
+    "daily_equity_url": "https://show940125.github.io/tw-sector-screener/archive/20260505/daily-equity.csv"
   }
 }
