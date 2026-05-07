@@ -12,14 +12,14 @@
     {
       "portfolio_id": "aggressive",
       "name": "激進型",
-      "equity": 1021607.73,
-      "cash": 526557.73,
-      "holdings_value": 495050.0,
-      "return_pct": 2.16,
+      "equity": 1021086.72,
+      "cash": 160416.22,
+      "holdings_value": 860670.5,
+      "return_pct": 2.11,
       "max_drawdown_pct": 0.0,
-      "trade_count": 0,
+      "trade_count": 3,
       "win_rate": 0.0,
-      "turnover_count": 0,
+      "turnover_count": 3,
       "portfolio_diagnostics": {
         "status": "insufficient_data",
         "period_count": 0,
@@ -41,14 +41,14 @@
     {
       "portfolio_id": "balanced",
       "name": "穩健型",
-      "equity": 1014974.89,
-      "cash": 643210.89,
-      "holdings_value": 371764.0,
-      "return_pct": 1.5,
+      "equity": 1014442.39,
+      "cash": 268991.89,
+      "holdings_value": 745450.5,
+      "return_pct": 1.44,
       "max_drawdown_pct": 0.0,
-      "trade_count": 0,
+      "trade_count": 3,
       "win_rate": 0.0,
-      "turnover_count": 0,
+      "turnover_count": 3,
       "portfolio_diagnostics": {
         "status": "insufficient_data",
         "period_count": 0,
@@ -101,21 +101,21 @@
     {
       "trade_date": "2026-05-07",
       "portfolio_id": "aggressive",
-      "equity": 1021607.73,
-      "cash": 526557.73,
+      "equity": 1021086.72,
+      "cash": 160416.22,
       "unsettled_cash": 0.0,
-      "holdings_value": 495050.0,
-      "return_pct": 2.1608,
+      "holdings_value": 860670.5,
+      "return_pct": 2.1087,
       "drawdown_pct": 0.0
     },
     {
       "trade_date": "2026-05-07",
       "portfolio_id": "balanced",
-      "equity": 1014974.89,
-      "cash": 643210.89,
+      "equity": 1014442.39,
+      "cash": 268991.89,
       "unsettled_cash": 0.0,
-      "holdings_value": 371764.0,
-      "return_pct": 1.4975,
+      "holdings_value": 745450.5,
+      "return_pct": 1.4442,
       "drawdown_pct": 0.0
     },
     {
@@ -164,6 +164,39 @@
       "risk_score": 61.81
     },
     {
+      "portfolio_id": "aggressive",
+      "symbol": "2356",
+      "name": "英業達",
+      "quantity": 2597,
+      "avg_cost": 46.57,
+      "last_price": 46.5,
+      "unrealized_pct": -0.15,
+      "recommendation": "買入",
+      "risk_score": 61.52
+    },
+    {
+      "portfolio_id": "aggressive",
+      "symbol": "2454",
+      "name": "聯發科",
+      "quantity": 42,
+      "avg_cost": 2874.09,
+      "last_price": 2870.0,
+      "unrealized_pct": -0.14,
+      "recommendation": "買入",
+      "risk_score": 61.81
+    },
+    {
+      "portfolio_id": "aggressive",
+      "symbol": "2308",
+      "name": "台達電",
+      "quantity": 56,
+      "avg_cost": 2223.16,
+      "last_price": 2220.0,
+      "unrealized_pct": -0.14,
+      "recommendation": "持有",
+      "risk_score": 48.37
+    },
+    {
       "portfolio_id": "balanced",
       "symbol": "2330",
       "name": "台積電",
@@ -195,6 +228,39 @@
       "unrealized_pct": 5.48,
       "recommendation": "持有",
       "risk_score": 61.81
+    },
+    {
+      "portfolio_id": "balanced",
+      "symbol": "2356",
+      "name": "英業達",
+      "quantity": 2661,
+      "avg_cost": 46.57,
+      "last_price": 46.5,
+      "unrealized_pct": -0.15,
+      "recommendation": "買入",
+      "risk_score": 61.52
+    },
+    {
+      "portfolio_id": "balanced",
+      "symbol": "2454",
+      "name": "聯發科",
+      "quantity": 43,
+      "avg_cost": 2874.09,
+      "last_price": 2870.0,
+      "unrealized_pct": -0.14,
+      "recommendation": "買入",
+      "risk_score": 61.81
+    },
+    {
+      "portfolio_id": "balanced",
+      "symbol": "2308",
+      "name": "台達電",
+      "quantity": 57,
+      "avg_cost": 2223.16,
+      "last_price": 2220.0,
+      "unrealized_pct": -0.14,
+      "recommendation": "持有",
+      "risk_score": 48.37
     }
   ],
   "orders": [
@@ -205,16 +271,16 @@
       "name": "英業達",
       "market": "TWSE",
       "side": "buy",
-      "order_type": "limit",
+      "order_type": "market",
       "quantity": 2597,
       "limit_price": 45.7,
       "reason": "激進型 依共用 screener：rank 11、買入、buying_tier formal_buy、confidence 82.2、risk 61.52",
       "policy_violation": false,
       "analysis_ref": {
         "symbol": "2356",
-        "as_of": "2026-05-07",
+        "as_of": "2026-05-06",
         "rank": 11,
-        "idea_score": 66.28,
+        "idea_score": 66.29,
         "recommendation": "買入",
         "confidence_score": 82.2,
         "risk_score": 61.52,
@@ -236,7 +302,10 @@
         ],
         "close": 46.5
       },
-      "status": "market_data_missing"
+      "status": "filled",
+      "market_order_note": "daily automation executes prior after-close buy decisions at next session open",
+      "fill_price": 46.5,
+      "filled_quantity": 2597
     },
     {
       "portfolio_id": "aggressive",
@@ -245,15 +314,15 @@
       "name": "聯發科",
       "market": "TWSE",
       "side": "buy",
-      "order_type": "limit",
+      "order_type": "market",
       "quantity": 42,
       "limit_price": 2801.96,
-      "reason": "激進型 依共用 screener：rank 18、買入、buying_tier formal_buy、confidence 82.2、risk 61.81",
+      "reason": "激進型 依共用 screener：rank 19、買入、buying_tier formal_buy、confidence 82.2、risk 61.81",
       "policy_violation": false,
       "analysis_ref": {
         "symbol": "2454",
-        "as_of": "2026-05-07",
-        "rank": 18,
+        "as_of": "2026-05-06",
+        "rank": 19,
         "idea_score": 63.26,
         "recommendation": "買入",
         "confidence_score": 82.2,
@@ -276,7 +345,10 @@
         ],
         "close": 2870.0
       },
-      "status": "market_data_missing"
+      "status": "filled",
+      "market_order_note": "daily automation executes prior after-close buy decisions at next session open",
+      "fill_price": 2870.0,
+      "filled_quantity": 42
     },
     {
       "portfolio_id": "aggressive",
@@ -285,16 +357,16 @@
       "name": "台達電",
       "market": "TWSE",
       "side": "buy",
-      "order_type": "limit",
+      "order_type": "market",
       "quantity": 56,
       "limit_price": 2118.56,
-      "reason": "激進型 依共用 screener：rank 20、持有、buying_tier risk_adjusted_buy、confidence 86.4、risk 48.37",
+      "reason": "激進型 依共用 screener：rank 21、持有、buying_tier risk_adjusted_buy、confidence 86.4、risk 48.37",
       "policy_violation": false,
       "analysis_ref": {
         "symbol": "2308",
-        "as_of": "2026-05-07",
-        "rank": 20,
-        "idea_score": 58.98,
+        "as_of": "2026-05-06",
+        "rank": 21,
+        "idea_score": 59.19,
         "recommendation": "持有",
         "confidence_score": 86.4,
         "risk_score": 48.37,
@@ -316,7 +388,10 @@
         ],
         "close": 2220.0
       },
-      "status": "market_data_missing"
+      "status": "filled",
+      "market_order_note": "daily automation executes prior after-close buy decisions at next session open",
+      "fill_price": 2220.0,
+      "filled_quantity": 56
     },
     {
       "portfolio_id": "balanced",
@@ -325,16 +400,16 @@
       "name": "英業達",
       "market": "TWSE",
       "side": "buy",
-      "order_type": "limit",
+      "order_type": "market",
       "quantity": 2661,
       "limit_price": 45.7,
       "reason": "穩健型 依共用 screener：rank 11、買入、buying_tier formal_buy、confidence 82.2、risk 61.52",
       "policy_violation": false,
       "analysis_ref": {
         "symbol": "2356",
-        "as_of": "2026-05-07",
+        "as_of": "2026-05-06",
         "rank": 11,
-        "idea_score": 66.28,
+        "idea_score": 66.29,
         "recommendation": "買入",
         "confidence_score": 82.2,
         "risk_score": 61.52,
@@ -356,7 +431,10 @@
         ],
         "close": 46.5
       },
-      "status": "market_data_missing"
+      "status": "filled",
+      "market_order_note": "daily automation executes prior after-close buy decisions at next session open",
+      "fill_price": 46.5,
+      "filled_quantity": 2661
     },
     {
       "portfolio_id": "balanced",
@@ -365,15 +443,15 @@
       "name": "聯發科",
       "market": "TWSE",
       "side": "buy",
-      "order_type": "limit",
+      "order_type": "market",
       "quantity": 43,
       "limit_price": 2801.96,
-      "reason": "穩健型 依共用 screener：rank 18、買入、buying_tier formal_buy、confidence 82.2、risk 61.81",
+      "reason": "穩健型 依共用 screener：rank 19、買入、buying_tier formal_buy、confidence 82.2、risk 61.81",
       "policy_violation": false,
       "analysis_ref": {
         "symbol": "2454",
-        "as_of": "2026-05-07",
-        "rank": 18,
+        "as_of": "2026-05-06",
+        "rank": 19,
         "idea_score": 63.26,
         "recommendation": "買入",
         "confidence_score": 82.2,
@@ -396,7 +474,10 @@
         ],
         "close": 2870.0
       },
-      "status": "market_data_missing"
+      "status": "filled",
+      "market_order_note": "daily automation executes prior after-close buy decisions at next session open",
+      "fill_price": 2870.0,
+      "filled_quantity": 43
     },
     {
       "portfolio_id": "balanced",
@@ -405,16 +486,16 @@
       "name": "台達電",
       "market": "TWSE",
       "side": "buy",
-      "order_type": "limit",
+      "order_type": "market",
       "quantity": 57,
       "limit_price": 2118.56,
-      "reason": "穩健型 依共用 screener：rank 20、持有、buying_tier risk_adjusted_buy、confidence 86.4、risk 48.37",
+      "reason": "穩健型 依共用 screener：rank 21、持有、buying_tier risk_adjusted_buy、confidence 86.4、risk 48.37",
       "policy_violation": false,
       "analysis_ref": {
         "symbol": "2308",
-        "as_of": "2026-05-07",
-        "rank": 20,
-        "idea_score": 58.98,
+        "as_of": "2026-05-06",
+        "rank": 21,
+        "idea_score": 59.19,
         "recommendation": "持有",
         "confidence_score": 86.4,
         "risk_score": 48.37,
@@ -436,10 +517,13 @@
         ],
         "close": 2220.0
       },
-      "status": "market_data_missing"
+      "status": "filled",
+      "market_order_note": "daily automation executes prior after-close buy decisions at next session open",
+      "fill_price": 2220.0,
+      "filled_quantity": 57
     }
   ],
-  "trade_count": 0,
+  "trade_count": 6,
   "policy_violation_count": 0,
   "latest_analysis": [
     {
@@ -1410,7 +1494,7 @@
     "note": "",
     "warnings": [
       "TAIEX FMTQIK ended before as_of; appended cross-checked weekday trading candidates.",
-      "Missing exact execution OHLCV for 2026-05-07 on 25 analysis symbols; affected orders are marked market_data_missing."
+      "Used same-day analysis close proxy for 25 execution symbols because exact OHLCV was unavailable."
     ],
     "fallback_dates": [
       "2026-05-04",
@@ -1418,8 +1502,9 @@
       "2026-05-06",
       "2026-05-07"
     ],
-    "missing_execution_ohlcv": {
+    "execution_price_proxy": {
       "execution_date": "2026-05-07",
+      "source": "same_day_analysis_close_proxy",
       "count": 25,
       "symbols": [
         "8271",
