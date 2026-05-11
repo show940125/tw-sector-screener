@@ -16,21 +16,64 @@
       "cash": 50786.2,
       "holdings_value": 984417.0,
       "return_pct": 3.52,
-      "max_drawdown_pct": 0.0,
+      "max_drawdown_pct": -0.15,
       "trade_count": 2,
       "win_rate": 0.0,
       "turnover_count": 2,
       "portfolio_diagnostics": {
-        "status": "insufficient_data",
-        "period_count": 0,
-        "var95_pct": 0.0,
-        "cvar95_pct": 0.0,
-        "ulcer_index": 0.0,
-        "omega_ratio": 0.0,
-        "tail_ratio": 0.0,
-        "rolling_sharpe": [],
-        "rolling_volatility": [],
-        "rolling_drawdown": [],
+        "status": "ok",
+        "period_count": 7,
+        "var95_pct": -1.3143,
+        "cvar95_pct": -1.8776,
+        "ulcer_index": 0.6923,
+        "omega_ratio": 2.9502,
+        "tail_ratio": 1.318,
+        "rolling_sharpe": [
+          {
+            "date": "2026-05-11",
+            "value": 6.6616
+          }
+        ],
+        "rolling_volatility": [
+          {
+            "date": "2026-05-11",
+            "value": 19.7886
+          }
+        ],
+        "rolling_drawdown": [
+          {
+            "date": "2026-04-30",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-01",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-04",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-05",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-06",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-07",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-08",
+            "value": -1.8776
+          },
+          {
+            "date": "2026-05-11",
+            "value": -0.5561
+          }
+        ],
         "alpha_pct": 0.0,
         "beta": 0.0,
         "information_ratio": 0.0,
@@ -45,21 +88,64 @@
       "cash": 253460.67,
       "holdings_value": 770710.7,
       "return_pct": 2.42,
-      "max_drawdown_pct": 0.0,
+      "max_drawdown_pct": -0.1,
       "trade_count": 2,
       "win_rate": 0.0,
       "turnover_count": 2,
       "portfolio_diagnostics": {
-        "status": "insufficient_data",
-        "period_count": 0,
-        "var95_pct": 0.0,
-        "cvar95_pct": 0.0,
-        "ulcer_index": 0.0,
-        "omega_ratio": 0.0,
-        "tail_ratio": 0.0,
-        "rolling_sharpe": [],
-        "rolling_volatility": [],
-        "rolling_drawdown": [],
+        "status": "ok",
+        "period_count": 7,
+        "var95_pct": -1.4501,
+        "cvar95_pct": -2.0715,
+        "ulcer_index": 0.7745,
+        "omega_ratio": 2.2236,
+        "tail_ratio": 1.074,
+        "rolling_sharpe": [
+          {
+            "date": "2026-05-11",
+            "value": 4.6961
+          }
+        ],
+        "rolling_volatility": [
+          {
+            "date": "2026-05-11",
+            "value": 19.4307
+          }
+        ],
+        "rolling_drawdown": [
+          {
+            "date": "2026-04-30",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-01",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-04",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-05",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-06",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-07",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-08",
+            "value": -2.0715
+          },
+          {
+            "date": "2026-05-11",
+            "value": -0.7124
+          }
+        ],
         "alpha_pct": 0.0,
         "beta": 0.0,
         "information_ratio": 0.0,
@@ -79,16 +165,59 @@
       "win_rate": 0.0,
       "turnover_count": 0,
       "portfolio_diagnostics": {
-        "status": "insufficient_data",
-        "period_count": 0,
+        "status": "ok",
+        "period_count": 7,
         "var95_pct": 0.0,
         "cvar95_pct": 0.0,
         "ulcer_index": 0.0,
-        "omega_ratio": 0.0,
-        "tail_ratio": 0.0,
-        "rolling_sharpe": [],
-        "rolling_volatility": [],
-        "rolling_drawdown": [],
+        "omega_ratio": 99.0,
+        "tail_ratio": 99.0,
+        "rolling_sharpe": [
+          {
+            "date": "2026-05-11",
+            "value": 0.0
+          }
+        ],
+        "rolling_volatility": [
+          {
+            "date": "2026-05-11",
+            "value": 0.0
+          }
+        ],
+        "rolling_drawdown": [
+          {
+            "date": "2026-04-30",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-01",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-04",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-05",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-06",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-07",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-08",
+            "value": 0.0
+          },
+          {
+            "date": "2026-05-11",
+            "value": 0.0
+          }
+        ],
         "alpha_pct": 0.0,
         "beta": 0.0,
         "information_ratio": 0.0,
@@ -98,6 +227,216 @@
     }
   ],
   "daily_equity": [
+    {
+      "trade_date": "2026-04-30",
+      "portfolio_id": "aggressive",
+      "equity": 998541.44,
+      "cash": 821336.44,
+      "unsettled_cash": 0.0,
+      "holdings_value": 177205.0,
+      "return_pct": -0.1459,
+      "drawdown_pct": -0.1459
+    },
+    {
+      "trade_date": "2026-04-30",
+      "portfolio_id": "balanced",
+      "equity": 999033.48,
+      "cash": 881608.48,
+      "unsettled_cash": 0.0,
+      "holdings_value": 117425.0,
+      "return_pct": -0.0967,
+      "drawdown_pct": -0.0967
+    },
+    {
+      "trade_date": "2026-04-30",
+      "portfolio_id": "conservative",
+      "equity": 1000000.0,
+      "cash": 1000000.0,
+      "unsettled_cash": 0.0,
+      "holdings_value": 0.0,
+      "return_pct": 0.0,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-01",
+      "portfolio_id": "aggressive",
+      "equity": 998541.44,
+      "cash": 821336.44,
+      "unsettled_cash": 0.0,
+      "holdings_value": 177205.0,
+      "return_pct": -0.1459,
+      "drawdown_pct": -0.1459
+    },
+    {
+      "trade_date": "2026-05-01",
+      "portfolio_id": "balanced",
+      "equity": 999033.48,
+      "cash": 881608.48,
+      "unsettled_cash": 0.0,
+      "holdings_value": 117425.0,
+      "return_pct": -0.0967,
+      "drawdown_pct": -0.0967
+    },
+    {
+      "trade_date": "2026-05-01",
+      "portfolio_id": "conservative",
+      "equity": 1000000.0,
+      "cash": 1000000.0,
+      "unsettled_cash": 0.0,
+      "holdings_value": 0.0,
+      "return_pct": 0.0,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-04",
+      "portfolio_id": "aggressive",
+      "equity": 1010161.44,
+      "cash": 821336.44,
+      "unsettled_cash": 0.0,
+      "holdings_value": 188825.0,
+      "return_pct": 1.0161,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-04",
+      "portfolio_id": "balanced",
+      "equity": 1006733.48,
+      "cash": 881608.48,
+      "unsettled_cash": 0.0,
+      "holdings_value": 125125.0,
+      "return_pct": 0.6733,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-04",
+      "portfolio_id": "conservative",
+      "equity": 1000000.0,
+      "cash": 1000000.0,
+      "unsettled_cash": 0.0,
+      "holdings_value": 0.0,
+      "return_pct": 0.0,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-05",
+      "portfolio_id": "aggressive",
+      "equity": 1019822.73,
+      "cash": 645147.73,
+      "unsettled_cash": 0.0,
+      "holdings_value": 374675.0,
+      "return_pct": 1.9823,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-05",
+      "portfolio_id": "balanced",
+      "equity": 1013147.05,
+      "cash": 764647.05,
+      "unsettled_cash": 0.0,
+      "holdings_value": 248500.0,
+      "return_pct": 1.3147,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-05",
+      "portfolio_id": "conservative",
+      "equity": 1000000.0,
+      "cash": 1000000.0,
+      "unsettled_cash": 0.0,
+      "holdings_value": 0.0,
+      "return_pct": 0.0,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-06",
+      "portfolio_id": "aggressive",
+      "equity": 1021607.73,
+      "cash": 526557.73,
+      "unsettled_cash": 0.0,
+      "holdings_value": 495050.0,
+      "return_pct": 2.1608,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-06",
+      "portfolio_id": "balanced",
+      "equity": 1014974.89,
+      "cash": 643210.89,
+      "unsettled_cash": 0.0,
+      "holdings_value": 371764.0,
+      "return_pct": 1.4975,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-06",
+      "portfolio_id": "conservative",
+      "equity": 1000000.0,
+      "cash": 1000000.0,
+      "unsettled_cash": 0.0,
+      "holdings_value": 0.0,
+      "return_pct": 0.0,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-07",
+      "portfolio_id": "aggressive",
+      "equity": 1040992.17,
+      "cash": 193311.54,
+      "unsettled_cash": 130295.88,
+      "holdings_value": 717384.75,
+      "return_pct": 4.0992,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-07",
+      "portfolio_id": "balanced",
+      "equity": 1031519.53,
+      "cash": 385483.1,
+      "unsettled_cash": 133422.98,
+      "holdings_value": 512613.45,
+      "return_pct": 3.152,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-07",
+      "portfolio_id": "conservative",
+      "equity": 1000000.0,
+      "cash": 1000000.0,
+      "unsettled_cash": 0.0,
+      "holdings_value": 0.0,
+      "return_pct": 0.0,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-08",
+      "portfolio_id": "aggressive",
+      "equity": 1021446.48,
+      "cash": 133381.23,
+      "unsettled_cash": 0.0,
+      "holdings_value": 888065.25,
+      "return_pct": 2.1446,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-08",
+      "portfolio_id": "balanced",
+      "equity": 1010151.22,
+      "cash": 269491.67,
+      "unsettled_cash": 0.0,
+      "holdings_value": 740659.55,
+      "return_pct": 1.0151,
+      "drawdown_pct": 0.0
+    },
+    {
+      "trade_date": "2026-05-08",
+      "portfolio_id": "conservative",
+      "equity": 1000000.0,
+      "cash": 1000000.0,
+      "unsettled_cash": 0.0,
+      "holdings_value": 0.0,
+      "return_pct": 0.0,
+      "drawdown_pct": 0.0
+    },
     {
       "trade_date": "2026-05-11",
       "portfolio_id": "aggressive",
