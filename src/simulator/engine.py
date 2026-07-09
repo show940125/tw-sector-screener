@@ -40,6 +40,7 @@ class SimulatorConfig:
     sell_tax_bps: float = 30.0
     min_commission: float = 20.0
     lot_size: int = 1
+    daily_analysis_mode: str = "prior-close"
 
 
 def run_simulation(
@@ -88,7 +89,12 @@ def run_simulation(
             portfolios = make_portfolios(config.initial_cash)
 
         trading_dates, market_status = _trading_dates(market_provider, config.start_date, config.end_date)
+        same_day_snapshot: tuple[Path, list[dict[str, Any]], Path] | None = None
+        if config.mode == "daily" and config.daily_analysis_mode == "same-day" and config.end_date in trading_dates:
+            same_day_snapshot = load_or_build_snapshot(config, config.end_date, runner, analysis_dir)
         pairs = _analysis_execution_pairs(trading_dates, config.start_date)
+        if config.mode == "daily" and pairs:
+            portfolios = store.latest_states_before(config.run_id, pairs[0][1].isoformat()) or make_portfolios(config.initial_cash)
         if not pairs and config.mode == "daily":
             market_status = _daily_market_status(config, trading_dates, market_status)
             daily_equity = _carry_forward_daily_equity(config, store, portfolios, peaks, market_status)
@@ -100,7 +106,12 @@ def run_simulation(
             if analysis_manifest:
                 _update_analysis_manifest_execution(analysis_manifest, execution_date, "built" if analysis_manifest.exists() else "unknown")
             store.save_analysis_ref(config.run_id, analysis_date.isoformat(), execution_tag, snapshot_path, len(rows))
-            candles = _execution_candles(market_provider, rows, execution_date)
+            if config.mode == "daily":
+                store.clear_execution_activity(config.run_id, execution_tag)
+            candles = _execution_candles(market_provider, rows, execution_date, allow_prior_fallback=config.mode != "daily")
+            if same_day_snapshot and execution_date == config.end_date:
+                _supplement_candles_from_same_day_analysis(candles, same_day_snapshot[1], execution_date, market_status)
+            _record_execution_data_status(market_status, rows, candles, execution_date)
             settlement_dates = _settlement_dates(trading_dates, execution_date)
             day_orders: list[dict[str, Any]] = []
             day_trades: list[dict[str, Any]] = []
@@ -110,6 +121,8 @@ def run_simulation(
                 portfolio = portfolios[portfolio_id]
                 release_settlements(portfolio, execution_tag)
                 orders = generate_policy_orders(portfolio, spec, rows, execution_tag, broker_config)
+                if config.mode == "daily":
+                    _mark_daily_buy_orders_as_market(orders)
                 final_orders, trades = execute_orders(portfolio, orders, candles, settlement_dates, broker_config)
                 metrics = portfolio_value(portfolio, price_map)
                 peaks[portfolio_id] = max(peaks.get(portfolio_id, config.initial_cash), metrics["equity"])
@@ -136,15 +149,43 @@ def run_simulation(
             all_trades.extend(day_trades)
             store.commit()
 
-        if not daily_equity:
+        planned_orders: list[dict[str, Any]] = []
+        if same_day_snapshot:
+            report_snapshot_path, report_rows, report_manifest = same_day_snapshot
+            latest_analysis = report_rows
+            next_execution_date = _next_execution_date(trading_dates, config.end_date)
+            _update_analysis_manifest_execution(report_manifest, next_execution_date, "built" if report_manifest.exists() else "unknown")
+            store.save_analysis_ref(config.run_id, config.end_date.isoformat(), next_execution_date.isoformat(), report_snapshot_path, len(report_rows))
+            planned_orders = _planned_orders_for_next_execution(portfolios, report_rows, next_execution_date, broker_config)
+            if planned_orders:
+                (orders_dir / f"{next_execution_date.strftime('%Y%m%d')}.planned.json").write_text(
+                    json.dumps(planned_orders, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+
+        if config.mode == "daily":
+            daily_equity = store.daily_equity_rows(config.run_id)
+        elif not daily_equity:
             daily_equity = store.daily_equity_rows(config.run_id)
         latest_manifest = _latest_analysis_manifest(analysis_dir, config.end_date)
         if latest_manifest and not pairs and config.mode == "daily":
             latest_manifest = _write_carry_forward_manifest(analysis_dir, latest_manifest, config.end_date)
         summary = _summary_payload(config, portfolios, daily_equity, all_orders, all_trades, latest_analysis, market_status)
+        if config.mode == "daily":
+            summary["execution_analysis_date"] = pairs[-1][0].isoformat() if pairs else None
+            summary["execution_date"] = pairs[-1][1].isoformat() if pairs else config.end_date.isoformat()
+            summary["report_analysis_date"] = config.end_date.isoformat() if same_day_snapshot else summary["execution_analysis_date"]
+            summary["planned_execution_date"] = (
+                planned_orders[0].get("date") if planned_orders else _next_execution_date(trading_dates, config.end_date).isoformat()
+            )
         if latest_manifest:
             summary["analysis_manifest"] = str(latest_manifest)
             summary["analysis_reports"] = [str(path) for path in _analysis_report_paths_from_manifest(latest_manifest)]
+            dashboard_lists = _dashboard_lists_from_manifest(latest_manifest)
+            summary["buying_ranking"] = dashboard_lists["buying_ranking"]
+            summary["actionable_queue"] = dashboard_lists["actionable_queue"]
+        summary["planned_orders"] = planned_orders
+        summary["planned_order_count"] = len(planned_orders)
         summary_path = run_dir / "summary.json"
         summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
         write_daily_equity_csv(run_dir / "daily-equity.csv", daily_equity)
@@ -401,6 +442,31 @@ def _analysis_report_paths_from_manifest(manifest_path: Path) -> list[Path]:
     return paths
 
 
+def _dashboard_lists_from_manifest(manifest_path: Path) -> dict[str, list[dict[str, Any]]]:
+    payload = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    buying: list[dict[str, Any]] = []
+    actionable: list[dict[str, Any]] = []
+    for item in payload.get("reports") or []:
+        theme = str(item.get("theme") or "")
+        report_json = item.get("report_json")
+        if not report_json:
+            continue
+        path = Path(report_json)
+        if not path.exists():
+            continue
+        report = json.loads(path.read_text(encoding="utf-8-sig"))
+        buying.extend(_dashboard_list_rows(theme, report.get("buying_ranking") or []))
+        actionable.extend(_dashboard_list_rows(theme, report.get("actionable_queue") or []))
+    return {
+        "buying_ranking": sorted(buying, key=lambda row: (row.get("theme"), int(row.get("list_rank") or row.get("rank") or 999))),
+        "actionable_queue": sorted(actionable, key=lambda row: (row.get("theme"), int(row.get("list_rank") or row.get("rank") or 999))),
+    }
+
+
+def _dashboard_list_rows(theme: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{**_dashboard_row(row), "theme": theme, "list_rank": row.get("list_rank"), "next_action": row.get("next_action"), "trigger_to_upgrade": row.get("trigger_to_upgrade")} for row in rows]
+
+
 def _manifest_reports_exist(manifest_path: Path) -> bool:
     if not manifest_path.exists():
         return False
@@ -501,7 +567,12 @@ def _analysis_execution_pairs(trading_dates: list[date], start_date: date) -> li
     return pairs
 
 
-def _execution_candles(provider: TwMarketProvider, rows: list[dict[str, Any]], execution_date: date) -> dict[str, dict[str, Any]]:
+def _execution_candles(
+    provider: TwMarketProvider,
+    rows: list[dict[str, Any]],
+    execution_date: date,
+    allow_prior_fallback: bool = True,
+) -> dict[str, dict[str, Any]]:
     candles: dict[str, dict[str, Any]] = {}
     for row in rows:
         symbol = str(row.get("symbol"))
@@ -512,11 +583,103 @@ def _execution_candles(provider: TwMarketProvider, rows: list[dict[str, Any]], e
         exact = [item for item in series if _as_date(item.get("date")) == execution_date]
         if exact:
             candles[symbol] = exact[-1]
-        else:
+        elif allow_prior_fallback:
             prior = [item for item in series if _as_date(item.get("date")) and _as_date(item.get("date")) <= execution_date]
             if prior:
                 candles[symbol] = prior[-1]
     return candles
+
+
+def _mark_daily_buy_orders_as_market(orders: list[dict[str, Any]]) -> None:
+    for order in orders:
+        if order.get("side") == "buy":
+            order["order_type"] = "market"
+            order["market_order_note"] = "daily automation executes prior after-close buy decisions at next session open"
+
+
+def _planned_orders_for_next_execution(
+    portfolios: dict[str, dict[str, Any]],
+    rows: list[dict[str, Any]],
+    execution_date: date,
+    broker_config: BrokerConfig,
+) -> list[dict[str, Any]]:
+    planned: list[dict[str, Any]] = []
+    execution_tag = execution_date.isoformat()
+    for portfolio_id, spec in POLICIES.items():
+        portfolio = deepcopy(portfolios[portfolio_id])
+        orders = generate_policy_orders(portfolio, spec, rows, execution_tag, broker_config)
+        _mark_daily_buy_orders_as_market(orders)
+        for order in orders:
+            order["status"] = "planned"
+            order["planned_from_analysis_date"] = rows[0].get("as_of") if rows else None
+        planned.extend(orders)
+    return planned
+
+
+def _supplement_candles_from_same_day_analysis(
+    candles: dict[str, dict[str, Any]],
+    same_day_rows: list[dict[str, Any]],
+    execution_date: date,
+    market_status: dict[str, Any],
+) -> None:
+    added: list[str] = []
+    for row in same_day_rows:
+        symbol = str(row.get("symbol"))
+        if not symbol or symbol in candles:
+            continue
+        close = float(row.get("close") or row.get("close_price") or 0.0)
+        if close <= 0:
+            continue
+        candles[symbol] = {
+            "date": execution_date,
+            "open": close,
+            "high": close,
+            "low": close,
+            "close": close,
+            "volume": 0.0,
+            "source": "same_day_analysis_close_proxy",
+        }
+        added.append(symbol)
+    if added:
+        market_status.setdefault("warnings", []).append(
+            f"Used same-day analysis close proxy for {len(added)} execution symbols because exact OHLCV was unavailable."
+        )
+        market_status["execution_price_proxy"] = {
+            "execution_date": execution_date.isoformat(),
+            "source": "same_day_analysis_close_proxy",
+            "count": len(added),
+            "symbols": added[:30],
+        }
+
+
+def _next_execution_date(trading_dates: list[date], analysis_date: date) -> date:
+    future = [item for item in trading_dates if item > analysis_date]
+    if future:
+        return future[0]
+    cursor = analysis_date + timedelta(days=1)
+    while not _is_calendar_trading_candidate(cursor):
+        cursor += timedelta(days=1)
+    return cursor
+
+
+def _record_execution_data_status(
+    market_status: dict[str, Any],
+    rows: list[dict[str, Any]],
+    candles: dict[str, dict[str, Any]],
+    execution_date: date,
+) -> None:
+    symbols = [str(row.get("symbol")) for row in rows if row.get("symbol")]
+    missing = [symbol for symbol in symbols if symbol not in candles]
+    if not missing:
+        return
+    market_status.setdefault("warnings", []).append(
+        f"Missing exact execution OHLCV for {execution_date.isoformat()} on {len(missing)} analysis symbols; affected orders are marked market_data_missing."
+    )
+    market_status["missing_execution_ohlcv"] = {
+        "execution_date": execution_date.isoformat(),
+        "count": len(missing),
+        "symbols": missing[:30],
+    }
 
 
 def _settlement_dates(trading_dates: list[date], execution_date: date) -> dict[str, str]:

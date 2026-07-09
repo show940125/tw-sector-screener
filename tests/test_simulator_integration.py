@@ -92,7 +92,17 @@ def _fake_runner(**kwargs):
                 "recommendation_detail": {"evidence_refs": ["trend_score"]},
             }
         )
-    path.write_text(json.dumps({"picks": picks}, ensure_ascii=False), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "picks": picks,
+                "buying_ranking": [{**row, "list_rank": idx, "list_type": "buying_ranking"} for idx, row in enumerate(picks[:3], start=1)],
+                "actionable_queue": [{**row, "list_rank": idx, "list_type": "actionable_queue", "next_action": "wait"} for idx, row in enumerate(picks[3:5], start=1)],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
     md_path.write_text(
         "\n".join(
             [
@@ -139,6 +149,8 @@ class SimulatorIntegrationTests(unittest.TestCase):
                 self.assertIn("portfolio_diagnostics", item)
                 self.assertIn("var95_pct", item["portfolio_diagnostics"])
             self.assertEqual(len(summary["latest_analysis"]), 10)
+            self.assertIn("buying_ranking", summary)
+            self.assertIn("actionable_queue", summary)
             self.assertIn("stock_risk_metrics", summary["latest_analysis"][0])
             self.assertIn("risk_adjusted_score", summary["latest_analysis"][0])
             self.assertIn("sharpe_ratio", summary["latest_analysis"][0])
@@ -150,7 +162,8 @@ class SimulatorIntegrationTests(unittest.TestCase):
                 self.assertIn("台股類股選股報告", report_path.read_text(encoding="utf-8"))
             dashboard = outputs["dashboard"].read_text(encoding="utf-8")
             self.assertIn("aggressive", dashboard)
-            self.assertIn("RiskAdj", dashboard)
+            self.assertIn("Buying Ranking", dashboard)
+            self.assertIn("Actionable Queue", dashboard)
 
     def test_daily_closed_market_carries_forward_latest_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -181,7 +194,9 @@ class SimulatorIntegrationTests(unittest.TestCase):
             aggressive = next(item for item in summary["portfolio_summaries"] if item["portfolio_id"] == "aggressive")
             self.assertLess(aggressive["cash"], 1_000_000)
             self.assertGreater(aggressive["holdings_value"], 0)
-            self.assertEqual(summary["daily_equity"][0]["trade_date"], "2026-05-01")
+            equity_dates = {row["trade_date"] for row in summary["daily_equity"]}
+            self.assertEqual(equity_dates, {"2026-04-30", "2026-05-01"})
+            self.assertEqual(len(summary["daily_equity"]), 6)
             self.assertFalse(summary["market_status"]["is_trading_day"])
             self.assertIn("勞動節休市", summary["market_status"]["note"])
             manifest = json.loads(outputs["analysis_manifest"].read_text(encoding="utf-8"))
@@ -258,8 +273,90 @@ class SimulatorIntegrationTests(unittest.TestCase):
             self.assertEqual(summary["market_status"]["source"], "TWSE FMTQIK + OHLCV cross-check")
             self.assertIn("2026-05-04", summary["market_status"]["fallback_dates"])
             self.assertTrue(summary["market_status"]["warnings"])
-            self.assertEqual(summary["daily_equity"][0]["trade_date"], "2026-05-04")
+            self.assertIn("2026-05-04", {row["trade_date"] for row in summary["daily_equity"]})
             self.assertGreater(len(summary["orders"]), 0)
+
+    def test_daily_same_day_analysis_uses_same_day_manifest_and_missing_exact_execution_data(self) -> None:
+        class _MissingCandidateExecutionProvider(_StaleTaiexProvider):
+            def get_ohlcv(self, symbol: str, market: str, as_of: date, lookback: int = 10):
+                rows = super().get_ohlcv(symbol, market, as_of, lookback)
+                if symbol in {"2301", "2302", "2303", "2306", "2307", "2308"}:
+                    return [row for row in rows if row["date"] < date(2026, 5, 4)]
+                return rows
+
+        with tempfile.TemporaryDirectory() as tmp:
+            outputs = run_simulation(
+                SimulatorConfig(
+                    themes=["AI", "半導體"],
+                    theme_mode="strict",
+                    start_date=date(2026, 5, 4),
+                    end_date=date(2026, 5, 4),
+                    initial_cash=1_000_000,
+                    top_n=10,
+                    recommendation_mode="deterministic",
+                    analysis_cache="refresh",
+                    output_root=Path(tmp),
+                    run_id="daily-AI-半導體",
+                    mode="daily",
+                    daily_analysis_mode="same-day",
+                ),
+                screener_runner=_fake_runner,
+                provider=_MissingCandidateExecutionProvider(),
+            )
+
+            summary = json.loads(outputs["summary"].read_text(encoding="utf-8"))
+            manifest = json.loads(outputs["analysis_manifest"].read_text(encoding="utf-8"))
+            self.assertEqual(manifest["analysis_date"], "2026-05-04")
+            self.assertEqual(manifest["execution_date"], "2026-05-05")
+            self.assertTrue(summary["market_status"]["warnings"])
+            self.assertIn("execution_price_proxy", summary["market_status"])
+            self.assertTrue(all(order["status"] == "filled" for order in summary["orders"]))
+            self.assertGreater(summary["trade_count"], 0)
+
+    def test_daily_rerun_replaces_orders_and_trades_for_same_execution_date(self) -> None:
+        class _MissingCandidateExecutionProvider(_StaleTaiexProvider):
+            def get_ohlcv(self, symbol: str, market: str, as_of: date, lookback: int = 10):
+                rows = super().get_ohlcv(symbol, market, as_of, lookback)
+                if symbol in {"2301", "2302", "2303", "2306", "2307", "2308"}:
+                    return [row for row in rows if row["date"] < date(2026, 5, 4)]
+                return rows
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = dict(
+                themes=["AI", "半導體"],
+                theme_mode="strict",
+                start_date=date(2026, 5, 4),
+                end_date=date(2026, 5, 4),
+                initial_cash=1_000_000,
+                top_n=10,
+                recommendation_mode="deterministic",
+                analysis_cache="refresh",
+                output_root=Path(tmp),
+                run_id="daily-AI-半導體",
+                mode="daily",
+                daily_analysis_mode="same-day",
+            )
+            first = run_simulation(SimulatorConfig(**base), screener_runner=_fake_runner, provider=_StaleTaiexProvider())
+            first_summary = json.loads(first["summary"].read_text(encoding="utf-8"))
+            self.assertGreater(len(first_summary["orders"]), 0)
+
+            second = run_simulation(SimulatorConfig(**base), screener_runner=_fake_runner, provider=_MissingCandidateExecutionProvider())
+            second_summary = json.loads(second["summary"].read_text(encoding="utf-8"))
+
+            import sqlite3
+
+            conn = sqlite3.connect(Path(tmp) / "simulations" / "daily-AI-半導體" / "simulator.sqlite")
+            try:
+                orders_count = conn.execute("SELECT COUNT(*) FROM orders WHERE run_id = ? AND trade_date = ?", ("daily-AI-半導體", "2026-05-04")).fetchone()[0]
+                trades_count = conn.execute("SELECT COUNT(*) FROM trades WHERE run_id = ? AND trade_date = ?", ("daily-AI-半導體", "2026-05-04")).fetchone()[0]
+            finally:
+                conn.close()
+            self.assertEqual(orders_count, len(second_summary["orders"]))
+            self.assertEqual(trades_count, second_summary["trade_count"])
+            csv_rows = second["daily_equity"].read_text(encoding="utf-8-sig").splitlines()[1:]
+            csv_keys = [tuple(row.split(",")[:2]) for row in csv_rows]
+            self.assertEqual(len(csv_keys), len(set(csv_keys)))
+            self.assertEqual(len(csv_keys), len(second_summary["daily_equity"]))
 
     def test_daily_stale_taiex_without_ohlcv_does_not_mark_weekday_trading(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -290,7 +387,7 @@ class SimulatorIntegrationTests(unittest.TestCase):
             self.assertFalse(summary["market_status"]["is_trading_day"])
             self.assertEqual(summary["market_status"]["source"], "TWSE FMTQIK")
             self.assertNotIn("fallback_dates", summary["market_status"])
-            self.assertEqual(summary["daily_equity"][0]["trade_date"], "2026-05-04")
+            self.assertIn("2026-05-04", {row["trade_date"] for row in summary["daily_equity"]})
             self.assertEqual(summary["orders"], [])
 
     def test_dashboard_contains_three_portfolios(self) -> None:

@@ -53,12 +53,20 @@ def render_dashboard(path: Path, payload: dict[str, Any]) -> Path:
       <div id="positions"></div>
     </section>
     <section>
-      <h2>近期委託與 Skill 遵循度</h2>
+      <h2>今日成交委託</h2>
       <div id="orders"></div>
     </section>
     <section>
-      <h2>最新 Top 20 Analysis Snapshot</h2>
-      <div id="analysis"></div>
+      <h2>明日計畫委託</h2>
+      <div id="planned-orders"></div>
+    </section>
+    <section>
+      <h2>Buying Ranking</h2>
+      <div id="buying-ranking"></div>
+    </section>
+    <section>
+      <h2>Actionable Queue</h2>
+      <div id="actionable-queue"></div>
     </section>
   </main>
   <script>
@@ -114,8 +122,10 @@ def render_dashboard(path: Path, payload: dict[str, Any]) -> Path:
     }}
     drawEquity();
     table(document.getElementById('positions'), DATA.positions || [], [['portfolio_id','Portfolio'], ['symbol','代碼'], ['name','名稱'], ['quantity','股數'], ['avg_cost','成本'], ['last_price','現價'], ['unrealized_pct','未實現%'], ['recommendation','建議'], ['risk_score','Risk']]);
-    table(document.getElementById('orders'), (DATA.orders || []).slice(-80), [['date','日期'], ['portfolio_id','Portfolio'], ['symbol','代碼'], ['side','方向'], ['status','狀態'], ['reason','理由'], ['policy_violation','違規']]);
-    table(document.getElementById('analysis'), DATA.latest_analysis || [], [['rank','Rank'], ['symbol','代碼'], ['name','名稱'], ['idea_score','Idea'], ['risk_adjusted_score','RiskAdj'], ['buying_tier','Buying Tier'], ['sharpe_ratio','Sharpe'], ['max_drawdown_pct','MaxDD'], ['recommendation','建議'], ['risk_score','Risk'], ['source_themes','來源題材']]);
+    table(document.getElementById('orders'), (DATA.orders || []).slice(-80), [['date','日期'], ['portfolio_id','Portfolio'], ['symbol','代碼'], ['side','方向'], ['quantity','股數'], ['limit_price','限價'], ['fill_price','成交價'], ['status','狀態'], ['reason','理由'], ['policy_violation','違規']]);
+    table(document.getElementById('planned-orders'), (DATA.planned_orders || []).slice(-80), [['date','日期'], ['portfolio_id','Portfolio'], ['symbol','代碼'], ['side','方向'], ['quantity','股數'], ['order_type','委託'], ['status','狀態'], ['reason','理由']]);
+    table(document.getElementById('buying-ranking'), DATA.buying_ranking || [], [['theme','題材'], ['list_rank','List'], ['rank','Rank'], ['symbol','代碼'], ['name','名稱'], ['recommendation','建議'], ['buying_tier','Buying Tier'], ['decision_tier','Decision'], ['buyability_score','Buyability'], ['confidence_score','Confidence'], ['risk_score','Risk'], ['close','收盤'], ['trigger_to_upgrade','觸發']]);
+    table(document.getElementById('actionable-queue'), DATA.actionable_queue || [], [['theme','題材'], ['list_rank','List'], ['rank','Rank'], ['symbol','代碼'], ['name','名稱'], ['recommendation','建議'], ['buying_tier','Buying Tier'], ['decision_tier','Decision'], ['actionability_score','Actionability'], ['confidence_score','Confidence'], ['risk_score','Risk'], ['close','收盤'], ['next_action','下一步']]);
   </script>
 </body>
 </html>

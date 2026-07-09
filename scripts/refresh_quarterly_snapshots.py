@@ -20,6 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="刷新核心題材季度快照並輸出覆蓋率摘要")
     parser.add_argument("--as-of", default=date.today().isoformat(), help="分析截止日 (YYYY-MM-DD)")
     parser.add_argument("--theme-mode", choices=["strict", "broad"], default="strict", help="題材池模式")
+    parser.add_argument("--universe-mode", choices=["core", "coverage", "broad"], default=None, help="題材 universe 模式；AI/半導體修補建議用 coverage")
     parser.add_argument("--themes", default=",".join(core_themes()), help="要刷新的主題，逗號分隔")
     parser.add_argument("--min-monthly-revenue", type=float, default=0.0, help="最低月營收門檻（元）")
     parser.add_argument("--timeout", type=float, default=10.0, help="HTTP 逾時秒數")
@@ -45,6 +46,7 @@ def _render_markdown(payload: dict[str, object]) -> str:
 
 - as_of：`{payload.get('as_of')}`
 - theme mode：`{payload.get('theme_mode')}`
+- universe mode：`{payload.get('universe_mode') or 'theme default'}`
 - symbols：`{payload.get('symbol_count')}`
 - quarterly store：`{payload.get('quarterly_store_path')}`
 - refresh run：`{payload.get('refresh_run_id')}`
@@ -76,6 +78,7 @@ def main() -> int:
         as_of=as_of,
         themes=themes,
         theme_mode=args.theme_mode,
+        universe_mode=args.universe_mode,
         min_monthly_revenue=args.min_monthly_revenue,
     )
     audit_dir = output_root / "audit" / as_of.strftime("%Y%m%d")

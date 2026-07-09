@@ -8,7 +8,7 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from src.analysis.factors import safe_float
@@ -83,6 +83,17 @@ def _parse_roc_slash(value: str) -> date:
     return date(year + 1911, month, day)
 
 
+def _try_parse_roc_slash(value: str) -> date | None:
+    try:
+        return _parse_roc_slash(value)
+    except Exception:
+        return None
+
+
+def _is_weekday(day: date) -> bool:
+    return day.weekday() < 5
+
+
 def _shift_month(d: date, delta: int) -> date:
     month_index = d.year * 12 + (d.month - 1) + delta
     year = month_index // 12
@@ -116,7 +127,7 @@ class TwMarketProvider:
     def _load_json(self, req: Request) -> Any:
         last_exc: Exception | None = None
         cache_file = self._cache_path(req)
-        cached = self._read_cache(cache_file, self._cache_ttl_seconds(req))
+        cached = self._read_cache(cache_file, self._cache_ttl_seconds(req), req)
         if cached is not None:
             return cached
         for attempt in range(3):
@@ -148,26 +159,77 @@ class TwMarketProvider:
 
     def _cache_ttl_seconds(self, req: Request) -> int:
         url = req.full_url.lower()
+        if self._is_incremental_monthly_endpoint(req):
+            return 20 * 60
         if any(marker in url for marker in ["date=", "stockno=", "code="]):
             return 365 * 24 * 3600
         return 12 * 3600
 
-    def _read_cache(self, cache_file: Path, ttl_seconds: int) -> Any:
+    def _read_cache(self, cache_file: Path, ttl_seconds: int, req: Request | None = None) -> Any:
         if not cache_file.exists():
             return None
         age_seconds = time.time() - cache_file.stat().st_mtime
         if age_seconds > ttl_seconds:
             return None
         try:
-            return json.loads(cache_file.read_text(encoding="utf-8"))
+            payload = json.loads(cache_file.read_text(encoding="utf-8"))
         except Exception:
             return None
+        if req is not None and self._cached_incremental_payload_is_stale(req, payload):
+            return None
+        return payload
 
     def _write_cache(self, cache_file: Path, payload: Any) -> None:
         try:
             cache_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         except Exception:
             return
+
+    def _is_incremental_monthly_endpoint(self, req: Request) -> bool:
+        url = req.full_url.lower()
+        return any(marker in url for marker in ["stock_day", "fmtqik", "tradingstock"])
+
+    def _cached_incremental_payload_is_stale(self, req: Request, payload: Any, today: date | None = None) -> bool:
+        if not self._is_incremental_monthly_endpoint(req) or not isinstance(payload, dict):
+            return False
+        requested_month = self._request_month(req)
+        today = today or date.today()
+        if requested_month != (today.year, today.month):
+            return False
+        latest = self._latest_payload_trade_date(payload)
+        return latest is not None and latest < today and _is_weekday(today)
+
+    def _request_month(self, req: Request) -> tuple[int, int] | None:
+        parsed = urlparse(req.full_url)
+        query = parse_qs(parsed.query)
+        if not query and isinstance(req.data, (bytes, bytearray)):
+            query = parse_qs(req.data.decode("utf-8", errors="ignore"))
+        raw = (query.get("date") or [""])[0]
+        digits = re.sub(r"[^0-9]", "", raw)
+        if len(digits) < 6:
+            return None
+        year = int(digits[:4])
+        month = int(digits[4:6])
+        return year, month
+
+    def _latest_payload_trade_date(self, payload: dict[str, Any]) -> date | None:
+        candidates: list[date] = []
+        rows = payload.get("data") if isinstance(payload.get("data"), list) else []
+        for row in rows:
+            if isinstance(row, list) and row:
+                parsed = _try_parse_roc_slash(str(row[0]))
+                if parsed:
+                    candidates.append(parsed)
+        tables = payload.get("tables")
+        if isinstance(tables, list):
+            for table in tables:
+                table_rows = table.get("data") if isinstance(table, dict) else []
+                for row in table_rows or []:
+                    if isinstance(row, list) and row:
+                        parsed = _try_parse_roc_slash(str(row[0]))
+                        if parsed:
+                            candidates.append(parsed)
+        return max(candidates) if candidates else None
 
     def _symbol_market_from_theme_rules(self, symbol: str) -> str:
         return "TPEx" if symbol.startswith("6") or symbol.startswith("8") else "TWSE"
@@ -498,11 +560,17 @@ class TwMarketProvider:
         eps = safe_float(
             (eps_row or {}).get("基本每股盈餘(元)")
             or (eps_row or {}).get("基本每股盈餘（元）")
+            or (eps_row or {}).get("基本每股盈餘")
             or (eps_row or {}).get("每股盈餘")
         )
         gross_margin = ((gross_profit / revenue) * 100.0) if revenue and gross_profit is not None else None
         roe = ((net_income / equity) * 400.0) if equity and net_income is not None else None
         return {"gross_margin": gross_margin, "eps": eps, "roe": roe}
+
+    def _is_complete_quarterly_row(self, row: dict[str, Any] | None) -> bool:
+        if not row:
+            return False
+        return all(isinstance(row.get(key), (int, float)) for key in ["gross_margin", "eps", "roe"])
 
     def _build_quarterly_store_record(
         self,
@@ -554,18 +622,31 @@ class TwMarketProvider:
         }
 
     def _ensure_quarterly_history(self, symbol: str, market: str, as_of: date) -> None:
-        existing = get_latest_periods(
+        target_period = self._latest_reported_period(market, as_of)
+        target_periods = self._period_sequence_from(target_period, 2)
+        existing = get_period_rows(
             self.quarterly_store_path,
             symbol=symbol,
             market=market,
-            periods=2,
+            periods=target_periods,
             as_of_date=as_of.isoformat(),
         )
-        if len(existing) >= 2:
+        if len(existing) >= 2 and all(self._is_complete_quarterly_row(row) for row in existing[:2]):
             return
 
         fetched_at = datetime.now().replace(microsecond=0).isoformat()
-        target_period = self._latest_reported_period(market, as_of)
+        current = existing[0] if existing and str(existing[0].get("period") or "") == target_period else None
+        if self._is_complete_quarterly_row(current):
+            previous_period = target_periods[1] if len(target_periods) > 1 else ""
+            if previous_period:
+                self._backfill_single_period(
+                    symbol=symbol,
+                    market=market,
+                    period=previous_period,
+                    as_of=as_of,
+                    attempted_at=fetched_at,
+                )
+            return
         try:
             current_snapshot = self._load_current_quarter_snapshot(symbol, market, as_of)
         except Exception:
@@ -631,6 +712,15 @@ class TwMarketProvider:
             current_record["fetch_status"] = "partial"
             current_record["missing_reason"] = "partial_metrics"
         insert_fundamental_snapshot(self.quarterly_store_path, current_record)
+        previous_period = target_periods[1] if len(target_periods) > 1 else ""
+        if previous_period:
+            self._backfill_single_period(
+                symbol=symbol,
+                market=market,
+                period=previous_period,
+                as_of=as_of,
+                attempted_at=fetched_at,
+            )
 
     def _backfill_single_period(
         self,
@@ -912,6 +1002,8 @@ class TwMarketProvider:
         force_retry_days: int = 30,
         trigger_type: str = "manual",
     ) -> dict[str, Any]:
+        if trigger_type in {"manual", "force", "quality-repair"}:
+            force_retry_days = 0
         theme_payloads: list[dict[str, Any]] = []
         all_symbols: dict[str, dict[str, Any]] = {}
         for theme in themes:
@@ -1030,13 +1122,19 @@ class TwMarketProvider:
         as_of: date,
         themes: list[str] | None = None,
         theme_mode: str = "strict",
+        universe_mode: str | None = None,
         min_monthly_revenue: float = 0.0,
     ) -> dict[str, Any]:
         selected_themes = themes or core_themes()
         theme_payloads: list[dict[str, Any]] = []
         all_symbols: dict[str, dict[str, Any]] = {}
         for theme in selected_themes:
-            rows = self.load_theme_universe(theme, min_monthly_revenue=min_monthly_revenue, theme_mode=theme_mode)
+            rows = self.load_theme_universe(
+                theme,
+                min_monthly_revenue=min_monthly_revenue,
+                theme_mode=theme_mode,
+                universe_mode=universe_mode,
+            )
             symbols = [row["symbol"] for row in rows]
             theme_payloads.append({"theme": theme, "symbol_count": len(symbols), "symbols": symbols})
             for row in rows:
@@ -1044,8 +1142,18 @@ class TwMarketProvider:
 
         refreshed_rows: list[dict[str, Any]] = []
         warnings: list[str] = []
+        anchor_period = self._latest_reported_period("TWSE", as_of)
+        target_periods = self._period_sequence_from(anchor_period, 2)
         for symbol, row in sorted(all_symbols.items()):
             market = str(row.get("market") or self._symbol_market_from_theme_rules(symbol))
+            prior_rows = get_period_rows(
+                self.quarterly_store_path,
+                symbol=symbol,
+                market=market,
+                periods=target_periods[:1],
+                as_of_date=as_of.isoformat(),
+            )
+            prior_current = prior_rows[0] if prior_rows else {}
             try:
                 payload = self.get_quarterly_fundamentals(symbol, market, as_of)
             except Exception as exc:
@@ -1055,7 +1163,15 @@ class TwMarketProvider:
                     "quality_missing_reason": "refresh_failed",
                     "data_quality_flags": ["quality:refresh_failed"],
                 }
-            refreshed_rows.append({"symbol": symbol, "market": market, **payload})
+            refreshed_rows.append(
+                {
+                    "symbol": symbol,
+                    "market": market,
+                    "prior_quality_fetch_status": prior_current.get("fetch_status"),
+                    "prior_quality_missing_reason": prior_current.get("missing_reason"),
+                    **payload,
+                }
+            )
 
         summary = summarize_coverage(
             self.quarterly_store_path,
@@ -1063,7 +1179,7 @@ class TwMarketProvider:
             periods_required=2,
             as_of_date=as_of.isoformat(),
             history_depth=8,
-            anchor_period=self._latest_reported_period("TWSE", as_of),
+            anchor_period=anchor_period,
         )
         run_id = f"refresh-{as_of.strftime('%Y%m%d')}-{theme_mode}"
         upsert_refresh_run(
@@ -1083,6 +1199,7 @@ class TwMarketProvider:
         return {
             "as_of": as_of.isoformat(),
             "theme_mode": theme_mode,
+            "universe_mode": universe_mode,
             "themes": theme_payloads,
             "symbol_count": len(refreshed_rows),
             "quarterly_store_path": str(self.quarterly_store_path),

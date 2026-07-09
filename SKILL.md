@@ -60,6 +60,8 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screene
 python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
   --as-of 2026-04-29 `
   --theme-mode strict `
+  --themes AI,半導體 `
+  --universe-mode coverage `
   --output-root "%USERPROFILE%\tw-sector-screener-output"
 ```
 
@@ -106,6 +108,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investm
 ```powershell
 python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investment_simulator.py" `
   --mode daily `
+  --daily-analysis-mode same-day `
   --themes AI,半導體 `
   --universe-mode coverage `
   --as-of today `
@@ -152,6 +155,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investm
 - `--as-of`：可用 `YYYY-MM-DD` 或 `today`
 - `--initial-cash`：每個 portfolio 初始資金
 - `--analysis-cache`：`reuse | refresh`
+- `--daily-analysis-mode`：`prior-close | same-day`；16:30 盤後自動化固定用 `same-day` 兩段式流程：先執行前一交易日決策在今日的成交，再用今日收盤資料產生今日報告與下一交易日 planned orders
 - `--config`：交易成本與 `lot_size` 設定；預設 `lot_size=1` 表示零股模式
 
 ## Output Contract
@@ -168,6 +172,8 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investm
 - `simulations/<run_id>/dashboard.html`
 - `simulations/<run_id>/summary.json`
 - `simulations/<run_id>/daily-equity.csv`
+
+`daily-equity.csv` 是從 `simulator.sqlite` 的 `daily_equity` ledger 重新輸出的完整歷史快照；daily rerun 以 `run_id + trade_date + portfolio_id` 取代同日同投組資料，避免 append-only CSV 產生重複列。Dashboard Equity Curve 讀這份完整序列。
 
 Validation v3 contract：
 - `validation_summary.mode = validation_report_v3`
@@ -206,5 +212,7 @@ Validation v3 contract：
 - `risk_adjusted_score` 來自單股 Sharpe / Sortino / drawdown / volatility，只輔助買進排序，不覆蓋 `idea_score`。
 - `recommendation` 是研究建議評估；LLM review 不改 deterministic ranking。
 - `macro_regime_overlay` 是 supplementary risk overlay，只能影響 risk/action，不得直接升級 ranking。
+- 每日 16:30 盤後自動化是兩段式收盤後工作流：前一交易日的 planned orders 在今日執行成交；今日收盤資料再產生當日 `analysis_date` 的 AI / 半導體報告與下一交易日 planned orders。
+- daily 模式成交模擬優先使用 execution date 的精確 OHLCV；若個股日線 endpoint 尚未到齊，但同日報告已產生收盤價，可用 `same_day_analysis_close_proxy` 作為 market buy 成交代理價並在 `market_status.execution_price_proxy` 顯示診斷；不得靜默退回舊 K 線。
 - repo 以 `Feature Branch + PR` 維護，分支名稱固定使用 `codex/` 前綴。
 - 官方執行輸出固定放在 `%USERPROFILE%\tw-sector-screener-output`，不進 git；repo 內只保留 `examples/sample-reports/` 樣本。

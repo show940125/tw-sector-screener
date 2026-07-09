@@ -221,7 +221,10 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_univers
 ```powershell
 python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\refresh_quarterly_snapshots.py" `
   --as-of 2026-04-29 `
-  --theme-mode strict
+  --themes AI,半導體 `
+  --theme-mode strict `
+  --universe-mode coverage `
+  --output-root "%USERPROFILE%\tw-sector-screener-output"
 ```
 
 歷史季度回補：
@@ -363,6 +366,8 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\publish_latest_da
 - `simulations/<run_id>/daily-equity.csv`
 - `simulations/<run_id>/orders/<yyyymmdd>.json`
 - `simulations/<run_id>/analysis/<yyyymmdd>/merged-top30.json`
+
+`daily-equity.csv` 是由 `simulator.sqlite` 的 `daily_equity` ledger 重建出的完整歷史快照，不是 append-only log。daily rerun 會以 `run_id + trade_date + portfolio_id` 取代同日同投組資料，再重新輸出整份 CSV，避免重跑同一天時留下重複或過期列；dashboard 的 Equity Curve 也讀同一份完整序列。
 
 ## Daily Dashboard Publishing
 

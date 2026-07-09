@@ -176,6 +176,67 @@ class ProviderUniverseHelpersTests(unittest.TestCase):
         self.assertEqual(summary["current_complete_pct"], 66.67)
         self.assertEqual(summary["top_candidate_gap_count"], 1)
 
+    def test_refresh_quarterly_snapshots_uses_requested_universe_mode_and_tracks_prior_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            provider = TwMarketProvider(timeout=0.1, cache_dir=Path(tmp))
+            init_db(provider.quarterly_store_path)
+            insert_fundamental_snapshot(
+                provider.quarterly_store_path,
+                {
+                    "symbol": "2451",
+                    "market": "TWSE",
+                    "period": "115Q1",
+                    "dataset_key": "twse_unknown",
+                    "source": "seed",
+                    "fetched_at": "2026-05-05T09:00:00",
+                    "as_of_date": "2026-05-05",
+                    "gross_margin": None,
+                    "eps": None,
+                    "roe": None,
+                    "revenue": None,
+                    "gross_profit": None,
+                    "net_income": None,
+                    "equity": None,
+                    "fetch_status": "unavailable",
+                    "missing_reason": "unavailable",
+                    "raw_payload_json": "{}",
+                },
+            )
+            loaded_modes = []
+
+            def fake_load_theme_universe(theme, min_monthly_revenue=0.0, theme_mode="strict", universe_mode=None):
+                loaded_modes.append((theme, theme_mode, universe_mode))
+                return [{"symbol": "2451", "market": "TWSE"}]
+
+            def fake_get_quarterly(symbol, market, as_of):
+                return {
+                    "gross_margin_latest": 40.0,
+                    "gross_margin_prev": 45.0,
+                    "eps_latest": 5.0,
+                    "eps_prev": 12.0,
+                    "roe_latest": 20.0,
+                    "roe_prev": 80.0,
+                    "quality_fetch_status": "ok",
+                    "quality_missing_reason": None,
+                    "quality_data_source": "mock",
+                    "quality_periods_used": ["115Q1", "114Q4"],
+                    "data_quality_flags": [],
+                }
+
+            with patch.object(provider, "load_theme_universe", side_effect=fake_load_theme_universe), patch.object(
+                provider, "get_quarterly_fundamentals", side_effect=fake_get_quarterly
+            ), patch.object(provider, "_latest_reported_period", return_value="115Q1"):
+                payload = provider.refresh_quarterly_snapshots(
+                    as_of=date(2026, 5, 29),
+                    themes=["AI"],
+                    theme_mode="strict",
+                    universe_mode="coverage",
+                )
+
+        self.assertEqual(loaded_modes, [("AI", "strict", "coverage")])
+        self.assertEqual(payload["rows"][0]["prior_quality_fetch_status"], "unavailable")
+        self.assertEqual(payload["rows"][0]["quality_fetch_status"], "ok")
+
 
 if __name__ == "__main__":
     unittest.main()

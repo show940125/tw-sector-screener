@@ -168,6 +168,8 @@ def simulate_fill(order: dict[str, Any], candle: dict[str, Any], config: BrokerC
     locked_down = all(abs(x - limit_down) / max(limit_down, 1.0) < 0.002 for x in [open_price, high, low, close])
 
     if order.get("side") == "buy":
+        if order.get("order_type") == "market":
+            return open_price, "filled"
         limit_price = float(order.get("limit_price") or 0.0)
         if open_price <= limit_price:
             return open_price, "filled"

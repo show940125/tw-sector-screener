@@ -3,3 +3,5 @@ __pycache__/
 .cache/
 output/
 tw-sector-screener-output/
+tw-sector-pages-stage-*/
+tw-sector-gh-pages-*/

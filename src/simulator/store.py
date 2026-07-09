@@ -111,6 +111,23 @@ class SimulationStore:
         ).fetchall()
         return {row[0]: json.loads(row[1]) for row in rows}
 
+    def latest_states_before(self, run_id: str, trade_date: str) -> dict[str, dict[str, Any]]:
+        rows = self.conn.execute(
+            """
+            SELECT portfolio_id, payload_json
+            FROM portfolio_states
+            WHERE run_id = ?
+              AND trade_date = (
+                SELECT MAX(trade_date)
+                FROM portfolio_states
+                WHERE run_id = ?
+                  AND trade_date < ?
+              )
+            """,
+            (run_id, run_id, trade_date),
+        ).fetchall()
+        return {row[0]: json.loads(row[1]) for row in rows}
+
     def daily_equity_rows(self, run_id: str) -> list[dict[str, Any]]:
         rows = self.conn.execute(
             """
@@ -123,6 +140,10 @@ class SimulationStore:
         ).fetchall()
         headers = ["trade_date", "portfolio_id", "equity", "cash", "unsettled_cash", "holdings_value", "return_pct", "drawdown_pct"]
         return [dict(zip(headers, row, strict=True)) for row in rows]
+
+    def clear_execution_activity(self, run_id: str, trade_date: str) -> None:
+        self.conn.execute("DELETE FROM orders WHERE run_id = ? AND trade_date = ?", (run_id, trade_date))
+        self.conn.execute("DELETE FROM trades WHERE run_id = ? AND trade_date = ?", (run_id, trade_date))
 
     def save_orders(self, run_id: str, trade_date: str, orders: list[dict[str, Any]]) -> None:
         for order in orders:

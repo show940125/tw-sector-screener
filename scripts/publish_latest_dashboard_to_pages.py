@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-url", default="https://show940125.github.io/tw-sector-screener")
     parser.add_argument("--remote", default="origin")
     parser.add_argument("--pages-branch", default="gh-pages")
+    parser.add_argument(
+        "--tmp-root",
+        default=None,
+        help="Writable temporary root for staging and gh-pages worktree. Defaults to USERPROFILE/tw-sector-screener-output/.pages-publish-tmp.",
+    )
     return parser.parse_args()
 
 
@@ -28,9 +34,17 @@ def main() -> int:
     repo_root = Path(args.repo_root).resolve()
     summary = _load_json(run_dir / "summary.json")
     date_tag = _date_tag(args.date, summary)
-    with tempfile.TemporaryDirectory(prefix="tw-sector-pages-stage-") as stage_tmp, tempfile.TemporaryDirectory(prefix="tw-sector-gh-pages-") as work_tmp:
-        stage_dir = Path(stage_tmp)
-        work_dir = Path(work_tmp) / "worktree"
+    tmp_root = _resolve_tmp_root(args.tmp_root)
+    _verify_tmp_root(tmp_root)
+    stage_tmp_path: Path | None = None
+    work_tmp_path: Path | None = None
+    with tempfile.TemporaryDirectory(prefix="tw-sector-pages-stage-", dir=str(tmp_root), ignore_cleanup_errors=True) as stage_tmp, tempfile.TemporaryDirectory(
+        prefix="tw-sector-gh-pages-", dir=str(tmp_root), ignore_cleanup_errors=True
+    ) as work_tmp:
+        stage_tmp_path = Path(stage_tmp).resolve()
+        work_tmp_path = Path(work_tmp).resolve()
+        stage_dir = Path(stage_tmp).resolve()
+        work_dir = (Path(work_tmp) / "worktree").resolve()
         _stage(run_dir, stage_dir, date_tag, args.base_url)
         _run(["git", "fetch", args.remote, args.pages_branch], cwd=repo_root)
         _run(["git", "worktree", "add", str(work_dir), f"{args.remote}/{args.pages_branch}"], cwd=repo_root)
@@ -45,7 +59,35 @@ def main() -> int:
                 print(f"[publish-pages] no dashboard changes for {date_tag}")
         finally:
             _run(["git", "worktree", "remove", str(work_dir), "--force"], cwd=repo_root, check=False)
+    _warn_if_residual_tmp([stage_tmp_path, work_tmp_path])
     return 0
+
+
+def _resolve_tmp_root(value: str | None) -> Path:
+    if value:
+        return Path(value).expanduser().resolve()
+    userprofile = Path.home()
+    return (userprofile / "tw-sector-screener-output" / ".pages-publish-tmp").resolve()
+
+
+def _verify_tmp_root(tmp_root: Path) -> None:
+    try:
+        tmp_root.mkdir(parents=True, exist_ok=True)
+        probe = tmp_root / f".write-probe-{uuid.uuid4().hex}"
+        probe.mkdir()
+        marker = probe / "ok.txt"
+        marker.write_text("ok", encoding="utf-8")
+        marker.unlink()
+        probe.rmdir()
+    except OSError as exc:
+        raise SystemExit(f"temporary publish root is not writable: {tmp_root} ({exc})") from exc
+
+
+def _warn_if_residual_tmp(paths: list[Path | None]) -> None:
+    residual = [path for path in paths if path and path.exists()]
+    if residual:
+        joined = "; ".join(str(path) for path in residual)
+        print(f"[publish-pages] warning: temporary cleanup left residual path(s): {joined}")
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -98,14 +140,18 @@ def _has_changes(cwd: Path) -> bool:
 
 
 def _run(command: list[str], cwd: Path, check: bool = True, capture: bool = False) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    result = subprocess.run(
         command,
         cwd=str(cwd),
-        check=check,
         text=True,
         stdout=subprocess.PIPE if capture else None,
         stderr=subprocess.STDOUT if capture else None,
     )
+    if check and result.returncode != 0:
+        rendered = " ".join(command)
+        detail = f"\n{result.stdout.strip()}" if capture and result.stdout else ""
+        raise SystemExit(f"publish command failed ({result.returncode}) in {cwd}: {rendered}{detail}")
+    return result
 
 
 if __name__ == "__main__":

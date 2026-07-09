@@ -31,6 +31,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top-n", type=int, default=20)
     parser.add_argument("--recommendation-mode", choices=["deterministic", "llm-review", "off"], default="deterministic")
     parser.add_argument("--analysis-cache", choices=["reuse", "refresh"], default="reuse")
+    parser.add_argument(
+        "--daily-analysis-mode",
+        choices=["prior-close", "same-day"],
+        default="prior-close",
+        help="daily 模式分析日。prior-close 用前一交易日分析執行今日；same-day 用當日盤後資料產生當日報告與委託。",
+    )
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
     parser.add_argument("--config", default=None, help="simulator JSON config，可覆蓋成本與 lot_size")
     parser.add_argument("--run-id", default=None, help="輸出 run id；未指定時自動產生")
@@ -76,6 +82,7 @@ def main() -> int:
         sell_tax_bps=float(extra.get("sell_tax_bps", 30.0)),
         min_commission=float(extra.get("min_commission", 20.0)),
         lot_size=int(extra.get("lot_size", 1)),
+        daily_analysis_mode=args.daily_analysis_mode,
     )
     outputs = run_simulation(config)
     for key, value in outputs.items():
