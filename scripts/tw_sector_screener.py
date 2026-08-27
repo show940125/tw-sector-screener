@@ -14,8 +14,9 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from src.analysis.actions import build_action_view
-from src.analysis.backtest import run_cross_sectional_backtest
+from src.analysis.backtest import build_candidate_tracking, run_cross_sectional_backtest
 from src.analysis.candidate_lists import build_candidate_lists
+from src.analysis.coverage_gate import CoverageGateError, evaluate_coverage_gate
 from src.analysis.factors import atr_wilder, momentum_return, percentile_rank, rsi_wilder, sma, trend_score, volatility_annualized
 from src.analysis.llm_review import apply_llm_review
 from src.analysis.recommendation import build_sector_recommendation
@@ -27,6 +28,7 @@ from src.providers.tw_market_provider import TwMarketProvider
 from src.report.decision_ledger import write_decision
 from src.report.export_structured import write_audit_trail, write_candidate_csv, write_json_report, write_watchlist
 from src.report.render_markdown import build_report_filename, render_report
+from src.report.render_validation_markdown import render_validation_markdown
 from src.themes import theme_rule
 
 
@@ -46,6 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", default=None, help="JSON / YAML config 路徑")
     parser.add_argument("--coverage-list", default=None, help="watchlist symbol 清單路徑（txt/json）")
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT), help="官方輸出根目錄")
+    parser.add_argument("--market-database", default=None, help="canonical market_data.sqlite 路徑")
     parser.add_argument("--output-dir", default=None, help="Deprecated alias，請改用 --output-root")
     parser.add_argument("--run-backtest", action="store_true", help="輸出簡化版截面回測與 validation report")
     parser.add_argument("--rebalance", choices=["weekly", "monthly"], default="monthly", help="回測再平衡頻率")
@@ -424,6 +427,7 @@ def _slice_benchmark_series(benchmark_series: list[dict[str, Any]], start_date: 
 
 def _build_validation_report(
     raw_rows: list[dict[str, Any]],
+    candidate_rows: list[dict[str, Any]],
     benchmark_series: list[dict[str, Any]],
     requested_window: str,
     rebalance: str,
@@ -464,6 +468,7 @@ def _build_validation_report(
         "rebalance": rebalance,
         "cost_bps": cost_bps,
         "metrics": selected_metrics,
+        "candidate_tracking": build_candidate_tracking(candidate_rows, benchmark_series),
         "windows": windows,
         "limitations": [
             "價格因子使用歷史日線做 point-in-time 驗證；基本面與品質因子目前仍偏向快照型訊號。",
@@ -502,6 +507,7 @@ def run(
     review_top_n: int = 8,
     decision_ledger: Path | None = None,
     no_target_price: bool = False,
+    market_database_path: Path | None = None,
 ) -> dict[str, Path]:
     config = load_config(config_path)
     output_formats = output_formats or {"md", "json", "csv"}
@@ -511,7 +517,15 @@ def run(
         Path(output_dir) if output_dir is not None else None,
         warnings,
     )
-    provider = TwMarketProvider(timeout=timeout, cache_dir=resolved_output_root / "cache" / "market")
+    provider = TwMarketProvider(
+        timeout=timeout,
+        cache_dir=resolved_output_root / "cache" / "market",
+        market_database_path=market_database_path,
+    )
+    # Keep one extra bar so the retrospective 252-day candidate table can
+    # calculate a 252-day return; do not force a 1y+40 history requirement on
+    # the daily coverage gate.
+    required_lookback = max(lookback, 253)
     weights = dict(config.get("weights") or {})
     min_revenue = max(float(config.get("filters", {}).get("min_monthly_revenue", 0.0) or 0.0), min_monthly_revenue)
     if theme_mode and universe_mode:
@@ -567,7 +581,7 @@ def run(
 
     taiex_series: list[dict[str, Any]] = []
     try:
-        taiex_series = provider.get_taiex_series(as_of=as_of, lookback=max(lookback, _validation_days(validation_window) + 40))
+        taiex_series = provider.get_taiex_series(as_of=as_of, lookback=required_lookback)
         taiex_closes = [float(x["close"]) for x in taiex_series]
         taiex_close = taiex_closes[-1]
         taiex_prev = taiex_closes[-2] if len(taiex_closes) >= 2 else None
@@ -595,12 +609,23 @@ def run(
     macro_regime_overlay = build_local_macro_overlay(market_overview, as_of)
 
     raw_rows: list[dict[str, Any]] = []
-    for candidate in universe[:universe_limit]:
+    daily_data_failures: list[dict[str, Any]] = []
+    analysis_universe = universe[:universe_limit] if universe_limit > 0 else universe
+    for candidate in analysis_universe:
         symbol = candidate["symbol"]
         market = candidate["market"]
         try:
-            candles = provider.get_ohlcv(symbol, market, as_of=as_of, lookback=max(lookback, _validation_days(validation_window) + 40))
+            candles = provider.get_ohlcv(symbol, market, as_of=as_of, lookback=required_lookback)
+            if len(candles) < required_lookback:
+                raise ValueError(f"日線資料不足：{len(candles)}/{required_lookback} 筆")
         except Exception as exc:
+            failure = {
+                "symbol": symbol,
+                "name": candidate.get("name"),
+                "market": market,
+                "reason": str(exc),
+            }
+            daily_data_failures.append(failure)
             warnings.append(f"{symbol} 日線失敗：{exc}")
             continue
         closes = [float(c["close"]) for c in candles]
@@ -886,6 +911,18 @@ def run(
             row["action_view"]["invalidation_conditions"] = recommendation["invalidation_conditions"]
             row["action_view"]["macro_regime_overlay"] = macro_regime_overlay
 
+    coverage_gate = evaluate_coverage_gate(
+        coverage_count=universe_size_before_limit,
+        attempted_count=len(analysis_universe),
+        ranked_count=len(ranked),
+        top_n=top_n,
+        missing_candidates=daily_data_failures,
+        universe_limit_applied=universe_limit > 0 and universe_size_before_limit > universe_limit,
+        benchmark_valid=benchmark != "TAIEX" or bool(taiex_series),
+    )
+    report_status = "complete" if coverage_gate.passed else "failed"
+    ranking_status = "valid" if coverage_gate.passed else "diagnostic_only"
+
     picks_all: list[dict[str, Any]] = []
     for row in ranked:
         public_row = {key: value for key, value in row.items() if key != "_candles"}
@@ -937,6 +974,10 @@ def run(
         as_of=as_of,
     )
     sector_overview = {
+        "report_status": report_status,
+        "ranking_status": ranking_status,
+        "coverage_gate": coverage_gate.as_dict(),
+        "required_lookback": required_lookback,
         "universe_count": len(ranked),
         "selection_pool_count": len(picks_all),
         "universe_mode": resolved_universe_mode,
@@ -977,9 +1018,24 @@ def run(
 
     validation_summary: dict[str, Any] = {"mode": "not-run", "window": validation_window, "rebalance": rebalance, "cost_bps": cost_bps}
     outputs: dict[str, Path] = {}
-    if run_backtest:
-        validation_summary = _build_validation_report(raw_rows, taiex_series, validation_window, rebalance, top_n, cost_bps)
-        outputs["backtest"] = write_json_report(backtests_dir / f"validation-{theme}-{date_tag}.json", validation_summary)
+    if run_backtest and coverage_gate.passed:
+        validation_summary = _build_validation_report(raw_rows, top_rows, taiex_series, validation_window, rebalance, top_n, cost_bps)
+        validation_path = backtests_dir / f"validation-{theme}-{date_tag}.json"
+        outputs["backtest"] = write_json_report(validation_path, validation_summary)
+        validation_markdown_path = validation_path.with_suffix(".md")
+        validation_markdown_path.write_text(
+            render_validation_markdown(theme, as_of.isoformat(), validation_summary), encoding="utf-8"
+        )
+        outputs["backtest_markdown"] = validation_markdown_path
+    elif run_backtest:
+        validation_summary = {
+            "mode": "blocked_by_coverage_gate",
+            "window": validation_window,
+            "rebalance": rebalance,
+            "cost_bps": cost_bps,
+            "coverage_gate": coverage_gate.as_dict(),
+            "limitations": ["coverage gate failed; validation was not run on an incomplete candidate universe"],
+        }
 
     top_pick = buying_ranking[0] if buying_ranking else {}
     action_pick = actionable_queue[0] if actionable_queue else {}
@@ -1047,12 +1103,16 @@ def run(
         "Benchmark 同時看相對 TAIEX、相對題材、相對產業，避免只用絕對漲幅自嗨。",
         "Action 與 ranking 拆開：排名是研究優先序，Overweight/Neutral/Underweight 才是動作建議。",
     ]
+    if not coverage_gate.passed:
+        method.insert(0, "Coverage gate 失敗：以下候選僅供診斷，未形成可用的完整題材池排名。")
     if run_backtest:
         method.append("Validation 已升級成 v3：保留 factor sleeves，並加入 portfolio risk diagnostics 與 benchmark-relative attribution。")
     risks = [
         "這是研究輔助，不是保證報酬；遇到法說、月營收、AI 出貨節奏變化時，結論需要重新驗證。",
         "若 benchmark-relative 轉負且 confidence 下滑，應優先減碼而不是凹單。",
     ]
+    if not coverage_gate.passed:
+        risks.insert(0, "本次輸出標記為 failed / diagnostic_only；不可把部分候選當成完整選股排名。")
     if (quality_coverage_summary.get("previous_complete_pct") or 0.0) < 80:
         risks.append("季度品質前期覆蓋仍未達高水位，quality score 的歷史比較仍需靠 SQLite 歷史累積補厚。")
     if (quality_coverage_summary.get("history_complete_pct") or 0.0) < 80:
@@ -1060,7 +1120,19 @@ def run(
     if warnings:
         risks.append(f"資料警示：{len(warnings)} 檔抓取失敗，結果可能有抽樣偏誤。")
 
+    diagnostics_getter = getattr(provider, "get_market_data_diagnostics", None)
+    market_data_diagnostics = diagnostics_getter() if callable(diagnostics_getter) else {}
+    store_diagnostics_getter = getattr(provider, "get_market_data_store_diagnostics", None)
+    market_data_store_diagnostics = store_diagnostics_getter() if callable(store_diagnostics_getter) else {}
     audit_payload = {
+        "report_status": report_status,
+        "ranking_status": ranking_status,
+        "ranking_valid": coverage_gate.passed,
+        "coverage_gate": coverage_gate.as_dict(),
+        "required_lookback": required_lookback,
+        "daily_data_failures": daily_data_failures,
+        "market_data_diagnostics": market_data_diagnostics,
+        "market_data_store_diagnostics": market_data_store_diagnostics,
         "theme": theme,
         "as_of": as_of.isoformat(),
         "theme_mode": resolved_theme_mode,
@@ -1080,6 +1152,13 @@ def run(
         "coverage_list_path": str(coverage_list_path) if coverage_list_path else None,
         "copied_coverage_list_path": str(copied_coverage) if copied_coverage else None,
         "cache_dir": str(getattr(provider, "cache_dir", resolved_output_root / "cache" / "market")),
+        "market_database_path": str(
+            getattr(
+                provider,
+                "market_data_db_path",
+                market_database_path or resolved_output_root / "cache" / "market" / "market_data.sqlite",
+            )
+        ),
         "quarterly_store_path": str(getattr(provider, "quarterly_store_path", resolved_output_root / "cache" / "market" / "quarterly_fundamentals.sqlite")),
         "refresh_run_id": update_result.get("refresh_run_id"),
         "quality_period_requirement": 2,
@@ -1136,6 +1215,9 @@ def run(
                 {
                     "theme": theme,
                     "as_of": as_of,
+                    "report_status": report_status,
+                    "ranking_status": ranking_status,
+                    "coverage_gate": coverage_gate.as_dict(),
                     "summary": summary,
                     "market_overview": market_overview,
                     "sector_overview": sector_overview,
@@ -1162,6 +1244,10 @@ def run(
             {
                 "theme": theme,
                 "as_of": as_of.isoformat(),
+                "report_status": report_status,
+                "ranking_status": ranking_status,
+                "ranking_valid": coverage_gate.passed,
+                "coverage_gate": coverage_gate.as_dict(),
                 "summary": summary,
                 "picks": picks,
                 "buying_ranking": buying_ranking,
@@ -1179,26 +1265,41 @@ def run(
     decisions_payload = {
         "theme": theme,
         "as_of": as_of.isoformat(),
+        "expected_current_trade_date": as_of.isoformat() if as_of.weekday() < 5 else None,
+        "report_status": report_status,
+        "ranking_status": ranking_status,
+        "ranking_valid": coverage_gate.passed,
+        "coverage_gate": coverage_gate.as_dict(),
         "recommendation_mode": recommendation_mode,
-        "rows": [pick.get("recommendation_detail") for pick in picks if pick.get("recommendation_detail")],
+        "rows": [pick.get("recommendation_detail") for pick in picks if pick.get("recommendation_detail")]
+        if coverage_gate.passed
+        else [],
     }
     decisions_dir = resolved_output_root / "decisions" / theme
     outputs["decisions"] = write_json_report(decisions_dir / f"decision-review-{theme}-{date_tag}.json", decisions_payload)
-    if recommendation_mode != "off":
+    if coverage_gate.passed and recommendation_mode != "off":
         ledger_path = decision_ledger or (resolved_output_root / "decisions" / "decision-ledger.sqlite")
         for item in decisions_payload["rows"]:
             if isinstance(item, dict):
                 write_decision(ledger_path, "tw-sector-screener", item, theme=theme)
     if "csv" in output_formats:
-        outputs["csv"] = write_candidate_csv(reports_dir / f"{stem}.csv", picks)
+        outputs["csv"] = write_candidate_csv(
+            reports_dir / f"{stem}.csv",
+            picks,
+            report_status=report_status,
+            ranking_valid=coverage_gate.passed,
+        )
 
     outputs["audit"] = write_audit_trail(audit_dir / f"{stem}.audit.json", audit_payload)
-    coverage_symbols = _load_coverage_symbols(Path(coverage_list_path)) if coverage_list_path else []
-    previous_watchlist = _load_previous_watchlist(watchlists_dir, theme, as_of)
-    outputs["watchlist"] = write_watchlist(
-        watchlists_dir / f"watchlist-{theme}-{date_tag}.json",
-        _build_watchlist_payload(theme, as_of, ranked, coverage_symbols, previous_watchlist),
-    )
+    if coverage_gate.passed:
+        coverage_symbols = _load_coverage_symbols(Path(coverage_list_path)) if coverage_list_path else []
+        previous_watchlist = _load_previous_watchlist(watchlists_dir, theme, as_of)
+        outputs["watchlist"] = write_watchlist(
+            watchlists_dir / f"watchlist-{theme}-{date_tag}.json",
+            _build_watchlist_payload(theme, as_of, ranked, coverage_symbols, previous_watchlist),
+        )
+    else:
+        raise CoverageGateError(coverage_gate, outputs)
     return outputs
 
 
@@ -1235,10 +1336,16 @@ def main() -> int:
             review_top_n=args.review_top_n,
             decision_ledger=Path(args.decision_ledger) if args.decision_ledger else None,
             no_target_price=args.no_target_price,
+            market_database_path=Path(args.market_database) if args.market_database else None,
         )
         for key, path in outputs.items():
             print(f"[tw-sector-screener] {key}: {path}")
         return 0
+    except CoverageGateError as exc:
+        print(f"[tw-sector-screener] {exc}")
+        for key, path in exc.artifacts.items():
+            print(f"[tw-sector-screener] diagnostic {key}: {path}")
+        return 1
     except Exception as exc:
         print(f"[tw-sector-screener] error: {exc}")
         return 1

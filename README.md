@@ -1,10 +1,6 @@
 # TW Sector Screener
 
 [![test](https://github.com/show940125/tw-sector-screener/actions/workflows/test.yml/badge.svg)](https://github.com/show940125/tw-sector-screener/actions/workflows/test.yml)
-[![daily dashboard](https://github.com/show940125/tw-sector-screener/actions/workflows/daily-dashboard.yml/badge.svg)](https://github.com/show940125/tw-sector-screener/actions/workflows/daily-dashboard.yml)
-
-Latest simulator dashboard: [show940125.github.io/tw-sector-screener/latest/dashboard.html](https://show940125.github.io/tw-sector-screener/latest/dashboard.html)
-
 `tw-sector-screener` 是一個台股主題研究的初篩工具。  
 它處理的核心問題，是把一整個題材裡原本混在一起的股票，整理成一份可以拿來研究、比較、追蹤的候選名單。
 
@@ -57,7 +53,6 @@ Latest simulator dashboard: [show940125.github.io/tw-sector-screener/latest/dash
 - 結構化輸出：同時產生 `Markdown / JSON / CSV`
 - 工作流支援：提供 `watchlist`、`audit trail`、`validation report`
 - 決策紀錄：輸出 `decision-review` JSON 與 SQLite decision ledger
-- 投資模擬器：三種投資人格共用同一份每日 top 20 analysis，模擬買賣、資產曲線、portfolio diagnostics 與 Skill 遵循度
 - 單股風險調整：每檔輸出 Sharpe、Sortino、max drawdown、volatility 與 `risk_adjusted_score`
 - 補充資料 contract：外部 connector 只能以 supplementary JSON contract 進入風險 overlay，不直接改寫 ranking
 - 資料品質揭露：拆分 `factor_coverage_confidence` 與 `data_freshness_confidence`
@@ -98,23 +93,23 @@ Latest simulator dashboard: [show940125.github.io/tw-sector-screener/latest/dash
 - validation v3 摘要與 portfolio risk diagnostics
 - audit trail
 
-投資模擬器會另外交付：
-
-- 激進型、穩健型、保守型三個 portfolio
-- 每日委託、成交、未成交與漲跌停受阻紀錄
-- 資產曲線、現金比例、持倉、最大回撤與 VaR/CVaR/Omega 等 portfolio diagnostics
-- 每筆交易是否遵循 screener recommendation 與人格政策
-
 ## Current Build Status
 
 本版已把排序、資料品質、validation 與研究建議評估接起來。排序仍由 deterministic factor engine 主導；recommendation decision layer 只負責把候選標的翻成後續研究動作，不反向改寫排名。
 
 ### A / Data Quality Hardening
 
-- 已建立 SQLite 季度資料層，路徑固定在官方 output root 下的 `cache/market/quarterly_fundamentals.sqlite`
+- 已建立統一 canonical SQLite 資料層，路徑固定在官方 output root 下的 `cache/market/market_data.sqlite`；原 daily/quarterly SQLite 僅作保留的遷移來源
 - 已加入季度刷新工具與 `quality_coverage_summary`
 - 已加入歷史季度回補 CLI，並支援近 8 季 history coverage 統計
 - 報告與 audit 會直接揭露當期與前期品質資料覆蓋率，以及所用的季度 store 路徑
+
+### H / Unified Market Data
+
+- canonical DB schema v2 已加入 dataset catalog、source registry、fetch attempts、sync items、incremental state 與 quality issue occurrence
+- `daily_bars` 採 DB-first；253 根歷史已齊且 current-day verified 時不逐月重抓，只補 missing range
+- 大型 raw payload 使用 hash/URI 隔離儲存；`scripts/verify_market_data.py` 提供只讀 integrity、foreign-key、coverage 與 benchmark gate
+- 年度財務、完整 PIT 季度修訂、估值歷史與公司事件 adapter 仍依開發文件分階段補齊
 
 ### B / Validation V3
 
@@ -126,7 +121,7 @@ Latest simulator dashboard: [show940125.github.io/tw-sector-screener/latest/dash
 ### C / Recommendation Decision Layer
 
 - 每檔 candidate 會輸出 `買入 / 持有 / 賣出`
-- 報告會同步輸出 `buying_ranking`、`actionable_queue`、`watchlist_candidates`、`research_list`；舊 `picks` 欄位保留為 research top N alias，供 simulator 與既有流程使用
+- 報告會同步輸出 `buying_ranking`、`actionable_queue`、`watchlist_candidates`、`research_list`；舊 `picks` 欄位保留為 research top N alias，供既有研究流程使用
 - `buying_ranking` 採 Buying Gate V2：可收 `formal_buy`、`risk_adjusted_buy`、`tactical_buy`，但 `research_list` 仍不是買進榜
 - `actionable_queue` 不放寬正式買進條件；它只列出 near buy、starter position 與 wait-for-trigger 的下一步動作
 - 新增 `risk_score`、`action_view`、`target_range`、`position_note`、`invalidation_conditions`、`evidence_refs`
@@ -139,7 +134,7 @@ Latest simulator dashboard: [show940125.github.io/tw-sector-screener/latest/dash
 
 - 每檔候選已加入 `stock_risk_metrics`：annualized return、volatility、Sharpe、Sortino、max drawdown、downside volatility、Calmar、win rate 與 return-to-drawdown
 - 新增 `risk_adjusted_score`，用來輔助 `buyability_score` 與 `actionability_score`
-- simulator shared analysis 與 dashboard 會保留 RiskAdj / Sharpe / drawdown 欄位，方便檢查策略是否買到高波動低效率標的
+- 研究輸出會保留 RiskAdj / Sharpe / drawdown 欄位，方便檢查是否偏向高波動低效率標的
 
 ### D / Theme Coverage Expansion
 
@@ -165,8 +160,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screene
   --universe-mode coverage `
   --benchmark TAIEX `
   --as-of 2026-04-29 `
-  --top-n 20 `
-  --run-backtest `
+  --top-n 30 `
   --validation-window 1y `
   --quality-update-mode auto `
   --quality-update-budget-sec 3 `
@@ -175,6 +169,8 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screene
   --output-format md,json,csv `
   --coverage-list "%USERPROFILE%\tw-reports\coverage-list.txt"
 ```
+
+`--run-backtest` 僅在明確需要 validation interpretation 時使用；每日自動化只在星期一加上此旗標。
 
 預設官方輸出根目錄：
 
@@ -198,7 +194,7 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screene
   --theme AI `
   --universe-mode coverage `
   --as-of 2026-04-29 `
-  --top-n 20 `
+  --top-n 30 `
   --recommendation-mode llm-review `
   --review-top-n 8 `
   --llm-provider openai `
@@ -237,40 +233,6 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\backfill_quarterl
   --batch-size 20
 ```
 
-投資模擬器：
-
-```powershell
-python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investment_simulator.py" `
-  --themes AI,半導體 `
-  --universe-mode coverage `
-  --start-date 2026-04-01 `
-  --end-date 2026-04-29 `
-  --initial-cash 1000000 `
-  --top-n 20 `
-  --recommendation-mode deterministic `
-  --analysis-cache reuse `
-  --output-root "%USERPROFILE%\tw-sector-screener-output"
-```
-
-每日自動化模式：
-
-```powershell
-python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investment_simulator.py" `
-  --mode daily `
-  --themes AI,半導體 `
-  --universe-mode coverage `
-  --as-of today `
-  --initial-cash 1000000 `
-  --top-n 20 `
-  --recommendation-mode deterministic `
-  --analysis-cache reuse `
-  --config "%USERPROFILE%\.codex\skills\tw-sector-screener\simulator.config.example.json" `
-  --output-root "%USERPROFILE%\tw-sector-screener-output"
-
-python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\publish_latest_dashboard_to_pages.py" `
-  --run-dir "%USERPROFILE%\tw-sector-screener-output\simulations\daily-AI-半導體"
-```
-
 ## CLI Surface
 
 核心參數如下：
@@ -297,19 +259,10 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\publish_latest_da
 - `--no-target-price`: 關閉目標區間推估
 - `--output-root`: 官方輸出根目錄
 - `--output-dir`: deprecated alias，保留相容
+- `--market-database`: canonical `market_data.sqlite` 路徑
+- `scripts/sync_market_data.py --datasets ... --mode incremental|full --dry-run`: 市場資料同步契約
 
 `config.example.json` 可作為自訂權重與 benchmark 的起點，見 [config.example.json](./config.example.json)。
-
-投資模擬器參數：
-
-- `--mode`: `historical` / `daily` / `historical-plus-daily`
-- `--themes`: 預設 `AI,半導體`
-- `--universe-mode`: `core` / `coverage` / `broad`，預設 `coverage`
-- `--start-date` / `--end-date` / `--as-of`: 可用 `YYYY-MM-DD` 或 `today`
-- `--initial-cash`: 每個 portfolio 初始資金，預設 `1000000`
-- `--top-n`: 共用 analysis 候選數，預設 `20`
-- `--analysis-cache`: `reuse` / `refresh`
-- `--config`: simulator JSON config，可調整交易成本與 `lot_size`
 
 ## Data Sources
 
@@ -319,9 +272,43 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\publish_latest_da
 - TWSE `exchangeReport`
 - TPEx OpenAPI
 - TPEx `afterTrading` API
+- MOPS 官方公開資料（財務與公司事件補充）
 
 季度品質資料目前採「官方最新季抓取 + SQLite append-only 歷史累積」模式。  
 最新季通常拿得到；前一期與更早期的覆蓋會隨日常刷新逐步變厚。這是現階段的真實限制，文件就該老實寫。
+
+市場資料統一寫入 `%USERPROFILE%\tw-sector-screener-output\cache\market\market_data.sqlite`。`daily_bars` 保存官方 verified 日線；`period_bars` 保存由日線派生的週/月/季/年線；季度/年度財務、月營收、估值、TAIEX、security master、題材 membership、raw payload 與 sync quality metadata 分表保存。provider 先讀 canonical DB，歷史 253 根已齊時只補缺少的當月/當日；正常交易日最新日線不是 `as_of` 就 fail-closed。
+
+歷史 cache import 不會自行把當日列標為已驗證；只有 provider 通過當日來源回應後，DB-first 才會重用該 `as_of` 的當日列，避免用舊 cache 靜默補成今日資料。
+
+既有 canonical rows 會建立 `market_data_sync_state` 的 `migrated` checkpoint，但這不等同於當日來源驗證；只有增量同步成功後才標記為 `verified`。
+
+同步與遷移驗證：
+
+```powershell
+Set-Location -LiteralPath "$env:USERPROFILE\.codex\skills\tw-sector-screener"
+python scripts\sync_market_data.py `
+  --themes AI,半導體 `
+  --universe-mode coverage `
+  --as-of 2026-04-29 `
+  --lookback 253 `
+  --mode incremental `
+  --datasets daily_bars,index_bars,security_master,monthly_revenue,period_bars `
+  --output-root "$env:USERPROFILE\tw-sector-screener-output" `
+  --database "$env:USERPROFILE\tw-sector-screener-output\cache\market\market_data.sqlite"
+
+python scripts\verify_market_data.py `
+  --database "$env:USERPROFILE\tw-sector-screener-output\cache\market\market_data.sqlite" `
+  --themes AI,半導體 `
+  --universe-mode coverage `
+  --as-of 2026-04-29 `
+  --lookback 253 `
+  --benchmark TAIEX
+```
+
+市場資料 schema、PIT 限制、raw payload 政策與分階段回補路線見 [docs/market-data-database-development.md](docs/market-data-database-development.md)。
+
+canonical DB 會同時保留 `effective_date`、`published_at`、`fetched_at`、來源 URL、payload hash、validation status 與 fallback/redirect 診斷；回測不得把發布日晚於觀察日的資料前置使用。
 
 ## How To Read The Report
 
@@ -342,49 +329,6 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\publish_latest_da
 - `Validation`: 目前排序框架的驗證結果
 - `Audit`: 本次參數、資料來源、警示與快取路徑
 - `History Coverage`: 近 8 季完整覆蓋程度
-
-## Investment Simulator
-
-模擬器的定位是驗證 skill，不是自動交易。它每天只產生一份共用分析，三種 portfolio 用同一份 `AI + 半導體` top 20 做決策：
-
-- `激進型`：可接受 top 5 的高信心 `持有`，投入上限高，換手較高
-- `穩健型`：只新增買入 `買入` 且 risk 可控的標的，保留 25% 現金
-- `保守型`：只買高信心低風險 `買入`，保留 50% 現金，遇到高風險快速降部位
-
-交易單位：
-
-- 預設 `lot_size=1`，也就是用台股零股模式，以 1 股為最小單位
-- 這能處理單張市值超過 100 萬的科技股，例如用 100 股、200 股模擬幾分之幾張
-- 若要模擬整股交易，使用 `simulator.config.example.json` 的副本並把 `lot_size` 改成 `1000`
-- daily 模式未指定 `--run-id` 時，會使用穩定 run id，例如 `daily-AI-半導體`，讓每日自動化能接續同一份模擬帳本
-
-輸出位置：
-
-- `simulations/<run_id>/simulator.sqlite`
-- `simulations/<run_id>/dashboard.html`
-- `simulations/<run_id>/summary.json`
-- `simulations/<run_id>/daily-equity.csv`
-- `simulations/<run_id>/orders/<yyyymmdd>.json`
-- `simulations/<run_id>/analysis/<yyyymmdd>/merged-top30.json`
-
-`daily-equity.csv` 是由 `simulator.sqlite` 的 `daily_equity` ledger 重建出的完整歷史快照，不是 append-only log。daily rerun 會以 `run_id + trade_date + portfolio_id` 取代同日同投組資料，再重新輸出整份 CSV，避免重跑同一天時留下重複或過期列；dashboard 的 Equity Curve 也讀同一份完整序列。
-
-## Daily Dashboard Publishing
-
-每日 dashboard 以本機 daily automation 的 simulator 產出為準，不提交到 `main`。自動化會在 simulator 成功產出後呼叫 `publish_latest_dashboard_to_pages.py`，將同一份本機 `daily-AI-半導體` dashboard 同步發布到 GitHub Pages。GitHub workflow 只保留手動觸發 / workflow_call 作為備援發布路徑，不另設獨立排程。
-
-- Latest dashboard：[latest/dashboard.html](https://show940125.github.io/tw-sector-screener/latest/dashboard.html)
-- Latest summary：[latest/summary.json](https://show940125.github.io/tw-sector-screener/latest/summary.json)
-- Latest equity CSV：[latest/daily-equity.csv](https://show940125.github.io/tw-sector-screener/latest/daily-equity.csv)
-- Manifest：[manifest.json](https://show940125.github.io/tw-sector-screener/manifest.json)
-
-Pages archive 會保留每日靜態輸出：
-
-- `archive/YYYYMMDD/dashboard.html`
-- `archive/YYYYMMDD/summary.json`
-- `archive/YYYYMMDD/daily-equity.csv`
-
-`simulator.sqlite`、market cache 與完整 raw cache 不發布到 Pages，也不進 git。repo 內的 `examples/sample-reports/` 只保留少量人工挑選樣本，用於 review 與契約回歸。
 
 Validation JSON 目前採 `validation_report_v3`，其中 `metrics.portfolio_diagnostics` 固定揭露風險診斷欄位；audit 會同步保留 `connector_contract_version`、`supplementary_connectors` 與 `macro_regime_overlay`。
 報告 JSON 另固定輸出 `buying_ranking`、`actionable_queue`、`watchlist_candidates`、`research_list`、backward-compatible `picks` 與 `universe_overview`；候選標的會揭露 `theme_buckets`、`primary_bucket`、`coverage_reason`、`core_watchlist_member`、`buying_tier`、`decision_tier`、`actionability_score`、`stock_risk_metrics` 與 `risk_adjusted_score`。audit 會保留 `ranking_policy_version = tw-three-list-v1`、`buying_gate_policy_version = tw-buying-gate-v2`、`action_queue_policy_version = tw-actionable-queue-v1`、`stock_risk_metrics_version = stock-risk-v1`、`list_counts` 與 universe 統計。
@@ -435,13 +379,12 @@ tw-sector-screener/
 目前仍有幾個明顯限制：
 
 - 季度品質資料前期覆蓋仍薄
+- 年度財務、歷史估值與公司事件尚未完成全 coverage 的 point-in-time adapter/backfill
 - validation 雖已升級，基本面與品質因子仍偏快照型
 - macro regime overlay 目前是 supplementary/local proxy contract，外部 macro connector 尚未直接作為 ranking signal
 - coverage universe 是 curated 靜態清單，仍需定期人工校準新上市、新轉型與錯配標的
 - LLM review 是可選研究層，不是資料源；沒有 evidence refs 的主張不應升級 recommendation
 - target range 會在資料不足時輸出 `null`，不硬編目標價
-- 投資模擬器使用日線 OHLC 撮合，無法還原盤中逐筆順序；同日停利停損同時觸發時採保守估計
-- 模擬器預設 `lot_size=1` 是零股模式；若要更接近整股交易，可在 simulator config 改成 `1000`
 
 因此，這個工具適合做研究前端漏斗，離完整機構研究平台還有一段路。
 

@@ -24,6 +24,10 @@
   - 必須同步更新 `README.md`
   - 必須同步更新 `SKILL.md`
   - 必須同步更新 `config.example.json`
+- 若影響 canonical market-data schema、sync 或 provenance：
+  - 必須同步更新 `docs/market-data-database-development.md`
+  - 必須同步更新 `scripts/verify_market_data.py` 或新增對應驗證測試
+  - 不得把 output root 的 SQLite、raw payload、logs 或報告產物加入 repo
 - 若影響報告欄位、watchlist、audit、validation：
   - 必須同步更新 `examples/sample-reports/`
 - 若影響評分方法、研究框架或 roadmap：
@@ -45,6 +49,7 @@
 
 - merge 前至少確認：
   - 測試全過
+  - canonical DB migration/integrity 與只讀 coverage verification 通過
   - `git status` 沒有非預期產物
   - 受影響的樣本輸出已更新
   - 已知限制寫進 PR 說明

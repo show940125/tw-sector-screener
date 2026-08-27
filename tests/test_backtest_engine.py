@@ -1,10 +1,30 @@
 import unittest
-from datetime import date
+from datetime import date, timedelta
 
-from src.analysis.backtest import run_cross_sectional_backtest
+from src.analysis.backtest import build_candidate_tracking, run_cross_sectional_backtest
 
 
 class BacktestEngineTests(unittest.TestCase):
+    def test_candidate_tracking_reports_each_current_candidate(self) -> None:
+        candles = [
+            {"date": date(2026, 1, 1) + timedelta(days=index), "close": 100.0 + index}
+            for index in range(130)
+        ]
+        benchmark = [
+            {"date": item["date"], "close": 1000.0 + (index * 2)}
+            for index, item in enumerate(candles)
+        ]
+        tracking = build_candidate_tracking(
+            [{"symbol": "2330", "name": "台積電", "rank": 1, "_candles": candles}], benchmark
+        )
+        self.assertEqual(tracking["candidate_count"], 1)
+        row = tracking["rows"][0]
+        self.assertEqual(row["symbol"], "2330")
+        self.assertIn("return_20d_pct", row)
+        self.assertIn("relative_to_taiex_20d_pct", row)
+        self.assertIn("max_drawdown_pct", row)
+        self.assertEqual(row["data_period"]["data_points"], 130)
+        self.assertIn("insufficient_history_for_252d", row["data_gaps"])
     def test_backtest_returns_deterministic_metrics(self) -> None:
         benchmark_series = [
             {"date": date(2026, 1, 1), "close": 100.0},

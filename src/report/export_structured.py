@@ -12,9 +12,17 @@ def write_json_report(path: Path, payload: dict[str, Any]) -> Path:
     return path
 
 
-def write_candidate_csv(path: Path, picks: list[dict[str, Any]]) -> Path:
+def write_candidate_csv(
+    path: Path,
+    picks: list[dict[str, Any]],
+    *,
+    report_status: str = "complete",
+    ranking_valid: bool = True,
+) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     headers = [
+        "report_status",
+        "ranking_valid",
         "rank",
         "symbol",
         "name",
@@ -48,6 +56,8 @@ def write_candidate_csv(path: Path, picks: list[dict[str, Any]]) -> Path:
             metrics = item.get("stock_risk_metrics") or {}
             writer.writerow(
                 {
+                    "report_status": report_status,
+                    "ranking_valid": ranking_valid,
                     "rank": item.get("rank"),
                     "symbol": item.get("symbol"),
                     "name": item.get("name"),

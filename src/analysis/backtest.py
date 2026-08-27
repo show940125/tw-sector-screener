@@ -30,6 +30,58 @@ def _annualized_volatility(period_returns: list[float], periods_per_year: float)
     return math.sqrt(variance) * math.sqrt(periods_per_year) * 100.0
 
 
+def _window_return(closes: list[float], days: int) -> float | None:
+    if len(closes) <= days or closes[-days - 1] == 0:
+        return None
+    return round(_pct_return(closes[-days - 1], closes[-1]) * 100.0, 2)
+
+
+def build_candidate_tracking(candidate_rows: list[dict[str, Any]], benchmark_series: list[dict[str, Any]]) -> dict[str, Any]:
+    """Describe trailing performance for today's candidates without reusing today's rank historically."""
+    benchmark_by_date = {item.get("date"): float(item.get("close") or 0.0) for item in benchmark_series}
+    rows: list[dict[str, Any]] = []
+    for candidate in candidate_rows:
+        candles = candidate.get("_candles") or []
+        closes = [float(item.get("close") or 0.0) for item in candles if float(item.get("close") or 0.0) > 0]
+        dates = [item.get("date") for item in candles if float(item.get("close") or 0.0) > 0]
+        returns = [_pct_return(closes[index - 1], closes[index]) for index in range(1, len(closes))]
+        item: dict[str, Any] = {
+            "rank": candidate.get("rank") or candidate.get("list_rank"),
+            "symbol": candidate.get("symbol"),
+            "name": candidate.get("name"),
+            "data_points": len(closes),
+            "data_start": str(dates[0]) if dates else None,
+            "data_end": str(dates[-1]) if dates else None,
+            "data_period": {
+                "start": str(dates[0]) if dates else None,
+                "end": str(dates[-1]) if dates else None,
+                "data_points": len(closes),
+            },
+            "data_gaps": [],
+            "annualized_volatility_pct": round(_annualized_volatility(returns, 252.0), 2),
+            "max_drawdown_pct": round(_max_drawdown(closes), 2),
+        }
+        for days, label in ((20, "20d"), (60, "60d"), (120, "120d"), (252, "252d")):
+            stock_return = _window_return(closes, days)
+            item[f"return_{label}_pct"] = stock_return
+            if stock_return is None:
+                item["data_gaps"].append(f"insufficient_history_for_{label}")
+            if len(dates) > days and dates[-days - 1] in benchmark_by_date and dates[-1] in benchmark_by_date:
+                benchmark_return = _pct_return(benchmark_by_date[dates[-days - 1]], benchmark_by_date[dates[-1]]) * 100.0
+                item[f"relative_to_taiex_{label}_pct"] = round(stock_return - benchmark_return, 2) if stock_return is not None else None
+            else:
+                item[f"relative_to_taiex_{label}_pct"] = None
+                item["data_gaps"].append(f"benchmark_gap_for_{label}")
+        rows.append(item)
+    return {
+        "mode": "current_top_n_individual_history_v1",
+        "candidate_count": len(rows),
+        "lookback_days": [20, 60, 120, 252],
+        "rows": rows,
+        "limitation": "僅追蹤本日入選候選的既有歷史表現；不將今日排名回填至歷史，不能視為無前視偏誤的選股規則驗證。",
+    }
+
+
 def _score_value(row: dict[str, Any], score_columns: list[str]) -> float:
     values = [float(row.get(column)) for column in score_columns if isinstance(row.get(column), (int, float))]
     if not values:

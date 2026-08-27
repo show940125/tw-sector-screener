@@ -194,11 +194,13 @@ class CliOutputTests(unittest.TestCase):
             self.assertTrue(outputs["audit"].exists())
             self.assertTrue(outputs["watchlist"].exists())
             self.assertTrue(outputs["backtest"].exists())
+            self.assertTrue(outputs["backtest_markdown"].exists())
             self.assertTrue(outputs["decisions"].exists())
             self.assertEqual(outputs["md"].parent, output_dir / "reports" / "20260312" / "AI")
             self.assertEqual(outputs["audit"].parent, output_dir / "audit" / "20260312")
             self.assertEqual(outputs["watchlist"].parent, output_dir / "watchlists" / "AI")
             self.assertEqual(outputs["backtest"].parent, output_dir / "backtests" / "AI")
+            self.assertIn("驗證回測解讀", outputs["backtest_markdown"].read_text(encoding="utf-8"))
 
             payload = json.loads(outputs["json"].read_text(encoding="utf-8"))
             self.assertIn("picks", payload)

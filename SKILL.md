@@ -25,6 +25,7 @@ description: Use when screening Taiwan sector/theme stocks and producing researc
 資料來源優先：
 1. TWSE OpenAPI + exchangeReport
 2. TPEx OpenAPI + afterTrading API
+3. MOPS 官方公開資料作財務與公司事件補充
 
 目前進度：
 - `A / Data Quality Hardening`：已建立 SQLite 季度資料層，並補季度刷新、歷史回補與 quality coverage summary
@@ -32,8 +33,58 @@ description: Use when screening Taiwan sector/theme stocks and producing researc
 - `C / Three-List Output`：已拆出 buying ranking、watchlist 與 research list
 - `D / Theme Coverage Expansion`：`AI` / `半導體` 預設使用 `coverage` universe；`core` 僅作高純度追蹤池
 - `E / Actionable Queue`：已補決策梯度，讓 `buying_ranking = 0` 時仍能回答下一步動作
-- `F / Stock Risk Metrics`：已加入單股 Sharpe / Sortino / drawdown / volatility 與 risk-adjusted score，輔助買進排序與 simulator analysis
+- `F / Stock Risk Metrics`：已加入單股 Sharpe / Sortino / drawdown / volatility 與 risk-adjusted score，輔助買進排序與研究分析
 - `G / Buying Gate V2`：已把買進榜拆成 `formal_buy`、`risk_adjusted_buy`、`tactical_buy`，讓低風險高 RiskAdj 標的不再被單一 idea 門檻排除
+- `H / Unified Market Data`：canonical `market_data.sqlite` 已升級 schema v2，加入 DB-first 增量 checkpoint、來源/抓取 provenance、品質 issue occurrence 與只讀驗證命令
+
+## Canonical Market Data SQLite
+
+官方 output root 的 canonical database 是：
+
+`%USERPROFILE%\tw-sector-screener-output\cache\market\market_data.sqlite`
+
+它以同一個 SQLite 分開保存 `daily_bars`、由日線派生的 `period_bars`（W/M/Q/Y）、季度與年度財務表、月營收、估值快照、TAIEX/index bars、security master、universe membership、corporate/raw payload metadata、sync runs 與 quality issues。原有 `daily_bars.sqlite` 與 `quarterly_fundamentals.sqlite` 是保留的遷移來源，不是新的寫入目標。
+
+日線 provider 採 DB-first：已有至少 253 根 verified bars 且最新交易日符合 `as_of` 時只讀 SQLite；只在缺少歷史區間或當月/當日尾端時增量抓取。正常交易日若最新 verified bar 不等於 `as_of`，會 fail-closed，不以舊 cache 冒充當日收盤。所有來源保留 effective/published/fetched timestamps、來源 URL、payload hash、validation status 與 fallback/redirect 診斷，回測仍須遵守 point-in-time 限制。
+
+cache import 是歷史資料整理，不會自動取得當日驗證資格；`daily_bar_sync_state.last_current_day_verified_date` 只有在 provider 通過當日來源回應驗證後才會設定。之後同一 `as_of` 的 DB hit 才可免重查，並在 audit 中記為 current-day verified。
+
+統一 DB 的 `market_data_sync_state` 會從既有 canonical rows 建立 `migrated` checkpoint，僅代表 SQLite 已有的資料範圍；只有增量同步重新驗證來源後才會更新為 `verified`。
+
+先同步 curated coverage 日線與 benchmark：
+
+```powershell
+Set-Location -LiteralPath "$env:USERPROFILE\.codex\skills\tw-sector-screener"
+python scripts\sync_market_data.py `
+  --themes AI,半導體 `
+  --universe-mode coverage `
+  --as-of 2026-04-29 `
+  --lookback 253 `
+  --mode incremental `
+  --datasets daily_bars,index_bars,security_master,monthly_revenue,period_bars `
+  --output-root "$env:USERPROFILE\tw-sector-screener-output" `
+  --database "$env:USERPROFILE\tw-sector-screener-output\cache\market\market_data.sqlite"
+```
+
+cache import、遷移與 integrity 可重跑驗證；import 是來源整理，不等同於當日驗證，當日 gate 由 sync/provider 最後確認：
+
+```powershell
+Set-Location -LiteralPath "$env:USERPROFILE\.codex\skills\tw-sector-screener"
+python -c "from pathlib import Path; from src.providers.market_data_store import ensure_market_data_db, database_integrity; p=Path.home()/'tw-sector-screener-output'/'cache'/'market'; ensure_market_data_db(p/'market_data.sqlite', daily_source=p/'daily_bars.sqlite', quarterly_source=p/'quarterly_fundamentals.sqlite'); print(database_integrity(p/'market_data.sqlite'))"
+```
+
+只讀驗證（不初始化、不遷移、不改 DB）：
+
+```powershell
+Set-Location -LiteralPath "$env:USERPROFILE\.codex\skills\tw-sector-screener"
+python scripts\verify_market_data.py `
+  --database "$env:USERPROFILE\tw-sector-screener-output\cache\market\market_data.sqlite" `
+  --themes AI,半導體 `
+  --universe-mode coverage `
+  --as-of 2026-04-29 `
+  --lookback 253 `
+  --benchmark TAIEX
+```
 
 ## Command
 
@@ -43,14 +94,15 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_screene
   --universe-mode coverage `
   --benchmark TAIEX `
   --as-of 2026-04-29 `
-  --top-n 20 `
-  --run-backtest `
+  --top-n 30 `
+  --lookback 253 `
   --quality-update-mode auto `
   --quality-update-budget-sec 3 `
   --quality-history-depth 8 `
   --recommendation-mode deterministic `
   --output-format md,json,csv `
   --coverage-list "%USERPROFILE%\tw-reports\coverage-list.txt" `
+  --market-database "%USERPROFILE%\tw-sector-screener-output\cache\market\market_data.sqlite" `
   --output-root "%USERPROFILE%\tw-sector-screener-output"
 ```
 
@@ -64,6 +116,8 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\refresh_quarterly
   --universe-mode coverage `
   --output-root "%USERPROFILE%\tw-sector-screener-output"
 ```
+
+`--run-backtest` 僅在明確需要 validation interpretation 時使用；每日自動化只在星期一加上此旗標。
 
 歷史回補：
 
@@ -86,38 +140,6 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_univers
   --bucket-types theme,industry `
   --max-symbols-per-bucket 160 `
   --output-dir "%USERPROFILE%\tw-sector-screener-output"
-```
-
-投資模擬器：
-
-```powershell
-python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investment_simulator.py" `
-  --themes AI,半導體 `
-  --universe-mode coverage `
-  --start-date 2026-04-01 `
-  --end-date 2026-04-29 `
-  --initial-cash 1000000 `
-  --top-n 20 `
-  --recommendation-mode deterministic `
-  --analysis-cache reuse `
-  --output-root "%USERPROFILE%\tw-sector-screener-output"
-```
-
-每日自動化模式：
-
-```powershell
-python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investment_simulator.py" `
-  --mode daily `
-  --daily-analysis-mode same-day `
-  --themes AI,半導體 `
-  --universe-mode coverage `
-  --as-of today `
-  --initial-cash 1000000 `
-  --top-n 20 `
-  --recommendation-mode deterministic `
-  --analysis-cache reuse `
-  --config "%USERPROFILE%\.codex\skills\tw-sector-screener\simulator.config.example.json" `
-  --output-root "%USERPROFILE%\tw-sector-screener-output"
 ```
 
 ## Parameters
@@ -147,16 +169,8 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investm
 - `--lookback`
 - `--output-root`
 - `--output-dir`（deprecated）
-
-投資模擬器參數：
-- `--mode`：`historical | daily | historical-plus-daily`
-- `--themes`：預設 `AI,半導體`
-- `--universe-mode`：`core | coverage | broad`，預設 `coverage`
-- `--as-of`：可用 `YYYY-MM-DD` 或 `today`
-- `--initial-cash`：每個 portfolio 初始資金
-- `--analysis-cache`：`reuse | refresh`
-- `--daily-analysis-mode`：`prior-close | same-day`；16:30 盤後自動化固定用 `same-day` 兩段式流程：先執行前一交易日決策在今日的成交，再用今日收盤資料產生今日報告與下一交易日 planned orders
-- `--config`：交易成本與 `lot_size` 設定；預設 `lot_size=1` 表示零股模式
+- `--market-database`：canonical `market_data.sqlite` 路徑
+- `scripts/sync_market_data.py --datasets ... --mode incremental|full --dry-run`：市場資料同步契約
 
 ## Output Contract
 
@@ -166,14 +180,11 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_investm
 - `audit/<yyyymmdd>/sector-report-<theme>-<yyyymmdd>.audit.json`
 - `watchlists/<theme>/watchlist-<theme>-<yyyymmdd>.json`
 - `backtests/<theme>/validation-<theme>-<yyyymmdd>.json`
+- `backtests/<theme>/validation-<theme>-<yyyymmdd>.md`（Monday validation interpretation）
 - `decisions/<theme>/decision-review-<theme>-<yyyymmdd>.json`
 - `decisions/decision-ledger.sqlite`
-- `simulations/<run_id>/simulator.sqlite`
-- `simulations/<run_id>/dashboard.html`
-- `simulations/<run_id>/summary.json`
-- `simulations/<run_id>/daily-equity.csv`
 
-`daily-equity.csv` 是從 `simulator.sqlite` 的 `daily_equity` ledger 重新輸出的完整歷史快照；daily rerun 以 `run_id + trade_date + portfolio_id` 取代同日同投組資料，避免 append-only CSV 產生重複列。Dashboard Equity Curve 讀這份完整序列。
+coverage gate 未通過時，報告可以輸出新鮮的診斷 artifacts，但不得建立可誤用的 decision ledger 或 validation backtest。
 
 Validation v3 contract：
 - `validation_summary.mode = validation_report_v3`
@@ -183,7 +194,7 @@ Validation v3 contract：
 - `reports` JSON 固定包含 `universe_overview`；候選標的會揭露 `theme_buckets`、`primary_bucket`、`coverage_reason` 與 `core_watchlist_member`
 - 候選標的固定揭露 `decision_tier`、`actionability_score`、`blocked_by`、`next_action`、`trigger_to_upgrade` 與 `why_not_buy_now`
 - 候選標的固定揭露 `stock_risk_metrics` 與 `risk_adjusted_score`
-- `picks` 保留為 research top N alias，讓 simulator 不漏掉賣出/降風險訊號
+- `picks` 保留為 research top N alias，讓既有研究流程不漏掉賣出/降風險訊號
 - `audit.ranking_policy_version = tw-three-list-v1`
 - `audit.action_queue_policy_version = tw-actionable-queue-v1`
 - `audit.stock_risk_metrics_version = stock-risk-v1`
@@ -212,7 +223,8 @@ Validation v3 contract：
 - `risk_adjusted_score` 來自單股 Sharpe / Sortino / drawdown / volatility，只輔助買進排序，不覆蓋 `idea_score`。
 - `recommendation` 是研究建議評估；LLM review 不改 deterministic ranking。
 - `macro_regime_overlay` 是 supplementary risk overlay，只能影響 risk/action，不得直接升級 ranking。
-- 每日 16:30 盤後自動化是兩段式收盤後工作流：前一交易日的 planned orders 在今日執行成交；今日收盤資料再產生當日 `analysis_date` 的 AI / 半導體報告與下一交易日 planned orders。
-- daily 模式成交模擬優先使用 execution date 的精確 OHLCV；若個股日線 endpoint 尚未到齊，但同日報告已產生收盤價，可用 `same_day_analysis_close_proxy` 作為 market buy 成交代理價並在 `market_status.execution_price_proxy` 顯示診斷；不得靜默退回舊 K 線。
+- 每日 16:30 盤後自動化執行 market-data sync 與 AI / 半導體研究報告；當日為正常交易日時，日線最新 verified bar 必須等於 `as_of`，否則整個主題輸出標記 failed。
+- canonical market data 先查 SQLite；完整 253 根且 current-day marker 已驗證時為 DB hit，不逐月重抓。缺少歷史區間只補 missing range；大型 raw payload 以 hash/URI 外置並由 integrity check 驗證。
+- schema 與資料表契約見 [docs/market-data-database-development.md](docs/market-data-database-development.md)。
 - repo 以 `Feature Branch + PR` 維護，分支名稱固定使用 `codex/` 前綴。
 - 官方執行輸出固定放在 `%USERPROFILE%\tw-sector-screener-output`，不進 git；repo 內只保留 `examples/sample-reports/` 樣本。

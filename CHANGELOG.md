@@ -6,16 +6,16 @@
 
 ### Added
 
-- 新增 `daily-dashboard` GitHub Actions workflow，可手動觸發或由其他 workflow 呼叫，將 simulator dashboard 發布到 `gh-pages`。
-- 新增 GitHub Pages 靜態輸出入口：`latest/dashboard.html`、`latest/summary.json`、`latest/daily-equity.csv`、`manifest.json` 與 `archive/YYYYMMDD/`。
-- 新增 `scripts/publish_pages_dashboard.py`，負責從 simulator run directory staging dashboard、summary、daily equity 與 Pages index。
-- 新增 `scripts/publish_latest_dashboard_to_pages.py`，讓本機 daily automation 跑完後可直接把正式 `daily-AI-半導體` dashboard 同步發布到 `gh-pages`。
+- 新增 canonical market-data schema v2 的 dataset/source registry、fetch attempts、sync items、incremental checkpoints 與品質 issue occurrences。
+- 新增 `scripts/verify_market_data.py`，以 read-only 模式驗證 SQLite integrity、foreign keys、253 根日線、current-day 與 benchmark gate。
+- 新增 `src/providers/market_data_adapters.py` 的 dataset adapter contract 與 `docs/market-data-database-development.md` 開發文件。
+- `scripts/sync_market_data.py` 新增 dataset scope、incremental/full mode、date provenance 與 dry-run 介面。
 
 ### Changed
 
-- README 加入 Latest Dashboard 連結與每日 Pages archive 規則。
-- 明確規範完整每日輸出不進 `main`；`examples/sample-reports/` 只保存少量人工挑選樣本。
-- `daily-dashboard` workflow 移除獨立 cron，只保留手動觸發與 workflow_call，避免與本機每日自動化產出不同步。
+- README、SKILL、CONTRIBUTING 與 backtest research skill 同步 canonical DB-first、PIT 與增量同步契約。
+- 明確規範 canonical SQLite、raw payload 與完整每日輸出不進 Git；`examples/sample-reports/` 只保存少量人工挑選樣本。
+- 未完成 adapter 的年度財務、歷史估值、公司事件與季度 PIT revision 不列入已完成資料能力。
 
 ## [0.3.0] - 2026-05-05
 
