@@ -89,7 +89,7 @@ class MarketDataSyncTests(unittest.TestCase):
     def test_dry_run_does_not_create_or_mutate_canonical_database(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             output_root = Path(tmp)
-            with patch.object(sync, "TwMarketProvider", _FakeSyncProvider):
+            with patch.object(sync, "TwMarketProvider", side_effect=AssertionError("provider must not be built")):
                 outputs = sync.run(
                     themes=["AI"],
                     as_of=date(2026, 8, 27),

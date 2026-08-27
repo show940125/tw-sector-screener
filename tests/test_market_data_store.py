@@ -117,6 +117,10 @@ class MarketDataStoreTests(unittest.TestCase):
                 quarterly_source=quarterly_source,
             )
             self.assertEqual(second["integrity"]["daily"]["daily_bar_count"], 2)
+            self.assertEqual(second["period_bars"]["status"], "skipped")
+            self.assertTrue(
+                second["sources"]["legacy_daily"]["skipped"]
+            )
 
     def test_sync_issue_fingerprint_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

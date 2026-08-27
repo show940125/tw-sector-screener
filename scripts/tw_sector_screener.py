@@ -539,6 +539,7 @@ def run(
             min_monthly_revenue=min_revenue,
             theme_mode=resolved_theme_mode,
             universe_mode=resolved_universe_mode,
+            as_of=as_of,
         )
     except TypeError:
         universe = provider.load_theme_universe(theme, min_monthly_revenue=min_revenue, theme_mode=resolved_theme_mode)

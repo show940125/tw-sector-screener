@@ -13,11 +13,13 @@
 | `index_bars` | 283 rows | production | TAIEX current-day verified |
 | `security_master_snapshots` | 54 rows | snapshot | 目前 coverage identity／industry 可用，歷史異動仍待補 |
 | `quarterly_company_fundamentals` | 4,708 rows | partial | 有既有季度資料，但 PIT 發布日與 revision lineage 待增強 |
-| `monthly_revenue` | 54 rows | snapshot | 目前各候選一筆；24／60 月歷史 adapter 待做 |
+| `monthly_revenue` | 54 rows | snapshot | 目前各候選一筆；60 月歷史 adapter 待做 |
 | `valuation_snapshots` | 54 rows | snapshot | 目前各候選一筆；歷史 PE/PB/殖利率 adapter 待做 |
 | `annual_company_fundamentals` | 0 rows | planned | 尚未建立年度 facts 回補流程 |
 | `corporate_actions` | 0 rows | planned | 尚未建立股利、分割、除權息事件回補流程 |
 | `market_data_sync_state` | 601 rows | control | 已由 canonical rows 建立 `migrated` checkpoint；不等同於 current-day verified |
+
+schema v3 另已建立但尚待歷史回補的研究表：`financial_fact_observations`、`market_sessions`、`security_trading_status`、`adjustment_factors`、`adjusted_bars`、`security_lifecycle`、`benchmark_membership`、`daily_market_stats`、`institutional_flows`、`margin_short_snapshots`、`market_events` 與 `market_data_source_links`。表存在、typed upsert 可用，不等於各資料集已達 coverage gate。
 
 ## 2. 共同資料契約
 
@@ -33,16 +35,19 @@
 
 ## 3. 分階段補齊
 
-### Phase 0：契約與可觀測性（已完成）
+### Phase 0：資料層正確性、契約與可觀測性（schema v3 foundation 已完成）
 
-- schema v2、dataset catalog、source registry、fetch attempts、quality issue dedupe。
+- schema v3、dataset catalog、source registry、fetch attempts、source payload links、PIT facts 與 quality issue dedupe。
 - legacy daily／quarterly migration 與 W/M/Q/Y period derivation。
-- DB-first provider、safe 308 redirect、current-day fail-closed、read-only verifier。
-- PowerShell 操作手冊與 `migrated`／`verified` checkpoint 語義。
+- DB-first provider、同源 HTTPS safe 308 redirect、TWSE/TPEx fallback、current-day fail-closed、read-only verifier。
+- daily/enrichment sync profile、真正的 from/to range、dry-run no network/no DB mutation、未實作 dataset non-zero failure。
+- 受影響 symbol 的 period/adjusted rebuild、legacy migration fingerprint 與 current-day verification marker。
+
+本階段交付的是「不再靜默略過或重抓已知資料」的資料層能力，不代表下列所有資料已完成歷史回補。任何空表、短歷史或缺少發布日的 dataset 仍標為 partial/planned。
 
 ### Phase 1：月營收與估值歷史
 
-目標是把目前每檔一筆 snapshot 擴成可重建的歷史序列，優先補 24 個月，之後視 storage／來源穩定度擴至 60 個月。
+目標是把目前每檔一筆 snapshot 擴成可重建的歷史序列，至少補 60 個月；若上市未滿 60 個月則保存上市以來並列明缺口。
 
 - 月營收：以 `revenue_month` 為 effective period，以官方發布／可取得日為 `available_date`；驗證 MoM／YoY 的月份連續性與數值型別。
 - 估值：以交易日為 effective date，保存 PE、PB、殖利率與當日來源；缺值不可用鄰日靜默填補。
@@ -76,12 +81,23 @@
 - `as_of` query 只能讀到當時已發布的版本；不能使用後來修訂回填過去研究日。
 - 財務數值與 period price bars 分開驗收；缺季度不可用最近季靜默代替。
 
-### Phase 5：歷史 identity、membership 與品質深化
+### Phase 5：價格狀態、歷史 identity、membership 與品質深化
 
 - security master 的上市狀態、名稱／產業變動與 effective interval。
 - theme membership 的版本與來源，區分當日 universe 與事後重建 universe。
+- `market_sessions`、停牌/處置、漲跌停與不可交易狀態；成交值、市值、流通股數與週轉率等 market stats。
+- 產業/類股 benchmark bars 與 PIT 成分，避免相對產業表現只用候選股平均值。
 - source SLA、缺口重試、payload retention、raw storage GC 與 schema migration manifest。
-- 將資料集狀態分為 `complete`、`partial`、`planned`，讓報告能直接揭露限制。
+- 將資料集狀態分為 `verified`、`partial`、`quarantined`、`failed`、`planned`，讓報告能直接揭露限制。
+
+### Phase 6：法人流向與事件研究
+
+- 三大法人日/週/月、融資融券、借券、重大訊息、法說會、股東會與股利公告。
+- 先以 research-only 輔助欄位與 warning 使用；達 95% active coverage、PIT 可重建並完成 20 個交易日 shadow test 後，才可申請接入 ranking。
+
+### Phase 7：選配資料
+
+董監事/大股東、ESG、宏觀、新聞全文與分析師預估只有在來源穩定、發布時間清楚、revision 可重播且有明確研究假說後才進 canonical；否則只進 raw/quarantine。
 
 ## 4. 每一個 adapter 的交付順序
 
@@ -102,6 +118,6 @@
 - 任何資料集回補失敗只使該資料集標為 partial；不得把部分資料宣稱完整，也不得影響 daily report 的 fail-closed 規則。
 - SQLite integrity、foreign key、raw external payload existence、schema version 與 migration manifest 全部通過。
 
-## 6. 本輪不做的事
+## 6. 本輪未宣稱完成的資料回補
 
-本文件只交付補齊設計與順序；本輪不進行年度／公司行動的網路大量回補，不把未知格式寫入 canonical，不把未完成資料集接入 ranking，也不把 SQLite 或 raw payload 上傳 repository。
+本輪已實作 schema、PIT/query、DB-first/incremental、同步狀態與測試，但不在沒有 watchdog、source fixture 與完整 manifest 的情況下宣稱已完成年度／公司行動／法人等網路大量回補。後續回補需使用 enrichment profile、小批次、可恢復 checkpoint 與 read-only verification；未知格式不寫入 canonical，不把未完成資料集接入 ranking，也不把 SQLite/raw payload 上傳 repository。

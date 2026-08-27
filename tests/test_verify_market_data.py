@@ -9,7 +9,11 @@ from unittest.mock import patch
 
 from scripts.verify_market_data import verify_database
 from src.providers.daily_bar_store import VerifiedDailyBar, import_verified_bars
-from src.providers.market_data_store import init_market_data_db, upsert_index_bars
+from src.providers.market_data_store import (
+    init_market_data_db,
+    record_source_payload,
+    upsert_index_bars,
+)
 
 
 def _bars(count: int) -> list[VerifiedDailyBar]:
@@ -67,6 +71,9 @@ class VerifyMarketDataTests(unittest.TestCase):
             self.assertTrue(result["read_only"])
             self.assertEqual(result["themes_result"]["AI"]["verified_count"], 1)
             self.assertEqual(result["benchmark_result"]["status"], "verified")
+            self.assertEqual(result["schema_version"], 3)
+            self.assertIn("financial_fact_observations", result["research_dataset_counts"])
+            self.assertTrue(result["pit_query_contract"]["available"])
             self.assertEqual(db_path.stat().st_mtime_ns, before)
             conn = sqlite3.connect(db_path)
             try:
@@ -104,6 +111,49 @@ class VerifyMarketDataTests(unittest.TestCase):
             self.assertEqual(result["status"], "failed")
             self.assertIn("current_day_missing", result["themes_result"]["AI"]["candidates"][0]["errors"][0])
             self.assertEqual(result["benchmark_result"]["status"], "failed")
+
+    def test_verification_reports_missing_external_payload_without_mutating_db(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "market_data.sqlite"
+            init_market_data_db(db_path)
+            import_verified_bars(db_path, _bars(253))
+            upsert_index_bars(
+                db_path,
+                [
+                    {
+                        "index_code": "TAIEX",
+                        "trade_date": date(2025, 8, 1) + timedelta(days=index),
+                        "close": 10000.0,
+                        "change_points": 1.0,
+                        "source_endpoint": "test",
+                        "source_url": "https://example.test/index",
+                        "source_payload_sha256": f"index-{index}",
+                    }
+                    for index in range(253)
+                ],
+            )
+            record_source_payload(
+                db_path,
+                dataset_key="test.large",
+                request_method="GET",
+                source_endpoint="test",
+                source_url="https://example.test/large",
+                payload=b"not-json-payload",
+                raw_storage_root=root / "raw_payloads",
+            )
+            external = next((root / "raw_payloads" / "test.large").glob("*.bin"))
+            external.unlink()
+            with patch("scripts.verify_market_data._candidate_symbols", return_value=["2330"]):
+                result = verify_database(
+                    db_path,
+                    themes=["AI"],
+                    as_of=date(2026, 8, 29),
+                    lookback=253,
+                )
+            self.assertEqual(result["status"], "failed")
+            self.assertEqual(result["source_payload_integrity"]["status"], "failed")
+            self.assertTrue(result["source_payload_integrity"]["external_payload_missing"])
 
 
 if __name__ == "__main__":

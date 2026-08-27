@@ -23,6 +23,9 @@ from src.providers.daily_bar_store import (
 )
 from src.providers.market_data_store import (
     ensure_market_data_db,
+    get_latest_monthly_revenue,
+    get_latest_security_master,
+    get_valuation_snapshot_as_of,
     get_index_bars,
     record_fetch_attempt,
     record_source_payload,
@@ -257,7 +260,10 @@ class TwMarketProvider:
         self.quarterly_store_path = self.market_data_db_path
         self._twse_valuation_cache: dict[str, dict[str, dict[str, float]]] = {}
         self._tpex_valuation_cache: dict[str, dict[str, dict[str, float]]] = {}
-        self._ohlcv_cache: dict[tuple[str, str, str, int, bool], list[dict[str, Any]]] = {}
+        self._ohlcv_cache: dict[
+            tuple[str, str, str, int, bool, str | None, bool],
+            list[dict[str, Any]],
+        ] = {}
         self._reported_period_cache: dict[tuple[str, str], str] = {}
         self._tpex_daily_quotes_cache: dict[date, dict[str, dict[str, Any]]] = {}
         self._market_data_stats = _MarketDataStats()
@@ -265,6 +271,10 @@ class TwMarketProvider:
         self._last_redirect_chain: list[str] = []
         self._basics_payload_hash: str | None = None
         self._revenue_payload_hash: str | None = None
+        self._last_source_payload_id: str | None = None
+        self._last_persisted_payload_id: str | None = None
+        self._basics_payload_ids: dict[str, str | None] = {}
+        self._revenue_payload_ids: dict[str, str | None] = {}
         # The TWSE/TPEx CDN can emit a self-308/428 when historical requests
         # are burst too quickly. Keep the transport bounded and deterministic.
         self._network_request_interval_seconds = 1.0
@@ -350,8 +360,9 @@ class TwMarketProvider:
     ) -> None:
         body = req.data if isinstance(req.data, (bytes, bytearray)) else b""
         effective = self._request_date(req) or date.today()
+        self._last_persisted_payload_id = None
         try:
-            record_source_payload(
+            self._last_persisted_payload_id = record_source_payload(
                 self.market_data_db_path,
                 dataset_key=endpoint_label or self._endpoint_name(source_url),
                 request_method=req.get_method(),
@@ -368,6 +379,7 @@ class TwMarketProvider:
         except Exception:
             # Source payload retention is best-effort; the validated bar/store
             # write remains the correctness boundary for a report.
+            self._last_persisted_payload_id = None
             return
 
     def _open_request(self, req: Request, *, insecure: bool = False) -> Any:
@@ -412,21 +424,33 @@ class TwMarketProvider:
             except HTTPError as exc:
                 if exc.code not in _REDIRECT_CODES:
                     raise
-                location = exc.headers.get("Location") if exc.headers else None
-                if not location:
-                    self._market_data_stats.redirect_failure_count += 1
-                    raise RuntimeError(f"HTTP {exc.code} 缺少 Location：{current.full_url}") from exc
-                self._market_data_stats.redirect_count += 1
-                if exc.code == 308:
-                    self._market_data_stats.redirect_308_count += 1
                 try:
-                    next_request = self._redirect_request(current, location, exc.code, visited)
-                except Exception:
-                    self._market_data_stats.redirect_failure_count += 1
-                    raise
-                visited.add(next_request.full_url)
-                redirect_chain.append(next_request.full_url)
-                current = next_request
+                    location = exc.headers.get("Location") if exc.headers else None
+                    if not location:
+                        self._market_data_stats.redirect_failure_count += 1
+                        raise RuntimeError(f"HTTP {exc.code} 缺少 Location：{current.full_url}") from exc
+                    self._market_data_stats.redirect_count += 1
+                    if exc.code == 308:
+                        self._market_data_stats.redirect_308_count += 1
+                    try:
+                        next_request = self._redirect_request(current, location, exc.code, visited)
+                    except Exception:
+                        self._market_data_stats.redirect_failure_count += 1
+                        raise
+                    visited.add(next_request.full_url)
+                    redirect_chain.append(next_request.full_url)
+                    current = next_request
+                finally:
+                    # urllib leaves the response body attached to HTTPError;
+                    # close it before following/rejecting a redirect so a
+                    # failed 308 does not leak a socket or BytesIO handle.
+                    close_error = getattr(exc, "close", None)
+                    if close_error is not None:
+                        close_error()
+                    response_body = getattr(exc, "fp", None)
+                    close = getattr(response_body, "close", None)
+                    if close is not None:
+                        close()
         self._market_data_stats.redirect_failure_count += 1
         self._last_redirect_chain = list(redirect_chain)
         raise RuntimeError(f"redirect 超過 3 層：{req.full_url}")
@@ -441,6 +465,10 @@ class TwMarketProvider:
     ) -> Any:
         last_exc: Exception | None = None
         cache_file = self._cache_path(req)
+        # A fresh file-cache hit has no guaranteed canonical payload linkage
+        # (older cache files predate source_payloads).  Never let an ID from a
+        # previous request leak into the next canonical row.
+        self._last_persisted_payload_id = None
         if use_cache:
             cached = self._read_cache(cache_file, self._cache_ttl_seconds(req), req)
             if cached is not None:
@@ -777,19 +805,40 @@ class TwMarketProvider:
         min_monthly_revenue: float = 0.0,
         theme_mode: str = "strict",
         universe_mode: str | None = None,
+        as_of: date | None = None,
     ) -> list[dict[str, Any]]:
         rule = theme_rule(theme, theme_mode=theme_mode, universe_mode=universe_mode)
+        required_symbols = {
+            str(symbol).strip()
+            for symbol in (rule.get("coverage_symbols") or rule.get("symbols") or [])
+            if str(symbol).strip()
+        }
+        # Broad keyword discovery intentionally needs the complete metadata
+        # universe; limiting its DB lookup to curated coverage would silently
+        # turn ``broad`` into ``coverage``.
+        if rule.get("universe_mode") == "broad":
+            required_symbols = set()
         output: list[dict[str, Any]] = []
-        for row in self.load_all_universe(min_monthly_revenue=min_monthly_revenue):
+        for row in self.load_all_universe(
+            min_monthly_revenue=min_monthly_revenue,
+            as_of=as_of,
+            required_symbols=required_symbols or None,
+        ):
             if self._theme_match(row["symbol"], row["name"], row.get("industry") or "", rule):
                 output.append({**row, **self._theme_metadata(row["symbol"], rule)})
 
         output.sort(key=lambda x: x.get("monthly_revenue", 0.0), reverse=True)
         return output
 
-    def load_all_universe(self, min_monthly_revenue: float = 0.0) -> list[dict[str, Any]]:
-        basics = self._load_basics()
-        revenue_map = self._load_latest_revenue_map()
+    def load_all_universe(
+        self,
+        min_monthly_revenue: float = 0.0,
+        *,
+        as_of: date | None = None,
+        required_symbols: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        basics = self._load_basics(as_of=as_of, required_symbols=required_symbols)
+        revenue_map = self._load_latest_revenue_map(as_of=as_of, required_symbols=required_symbols)
         output: list[dict[str, Any]] = []
         for symbol, item in basics.items():
             rev = revenue_map.get(symbol, {})
@@ -849,6 +898,7 @@ class TwMarketProvider:
             ]
 
         collected: dict[date, dict[str, Any]] = {}
+        provenance: dict[date, dict[str, Any]] = {}
         cursor = date(as_of.year, as_of.month, 1)
         months_checked = 0
 
@@ -859,12 +909,14 @@ class TwMarketProvider:
             )
             payload = self._load_json(fmt_request, endpoint_label="twse.fmtqik")
             if isinstance(payload, dict) and payload.get("stat") == "OK":
-                self._record_market_payload(
+                payload_hash = self._record_market_payload(
                     dataset_key="twse.fmtqik",
                     request=fmt_request,
                     payload=payload,
                     effective_date=cursor,
                 )
+                payload_source_url = self._last_resolved_source_url or fmt_request.full_url
+                payload_id = self._last_source_payload_id
                 fields = payload.get("fields") or []
                 rows = payload.get("data") or []
                 idx = {str(name).strip(): i for i, name in enumerate(fields)}
@@ -884,6 +936,11 @@ class TwMarketProvider:
                     if close is None:
                         continue
                     collected[d] = {"date": d, "close": float(close), "change_points": chg_pts}
+                    provenance[d] = {
+                        "source_url": payload_source_url,
+                        "source_payload_sha256": payload_hash,
+                        "source_payload_id": payload_id,
+                    }
 
             cursor = _shift_month(cursor, -1)
             months_checked += 1
@@ -891,10 +948,6 @@ class TwMarketProvider:
         series = sorted(collected.values(), key=lambda x: x["date"])
         if not series:
             raise RuntimeError("無法取得加權指數資料（TWSE FMTQIK）")
-        source_url = self._last_resolved_source_url or TWSE_FMTQIK_URL
-        payload_hash = hashlib.sha256(
-            json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
-        ).hexdigest()
         upsert_index_bars(
             self.market_data_db_path,
             [
@@ -904,8 +957,9 @@ class TwMarketProvider:
                     "close": item["close"],
                     "change_points": item.get("change_points"),
                     "source_endpoint": "twse.fmtqik",
-                    "source_url": source_url,
-                    "source_payload_sha256": payload_hash,
+                    "source_url": provenance.get(item["date"], {}).get("source_url", TWSE_FMTQIK_URL),
+                    "source_payload_sha256": provenance.get(item["date"], {}).get("source_payload_sha256", ""),
+                    "source_payload_id": provenance.get(item["date"], {}).get("source_payload_id"),
                     "fetched_at": datetime.now().astimezone().isoformat(),
                     "data_status": "verified",
                 }
@@ -1798,9 +1852,36 @@ class TwMarketProvider:
             "warnings": warnings,
         }
 
-    def _load_basics(self) -> dict[str, dict[str, Any]]:
+    def _load_basics(
+        self,
+        *,
+        as_of: date | None = None,
+        required_symbols: set[str] | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        lookup_date = as_of or date.today()
+        cached = get_latest_security_master(
+            self.market_data_db_path,
+            as_of=lookup_date,
+            symbols=required_symbols,
+        )
+        if cached and (required_symbols is None or required_symbols.issubset(cached)):
+            self._market_data_stats.db_hit_count += 1
+            return {
+                symbol: {
+                    "symbol": symbol,
+                    "name": str(row.get("name") or "").strip(),
+                    "industry": str(row.get("industry") or "").strip(),
+                    "market": str(row.get("market") or self._symbol_market_from_theme_rules(symbol)),
+                }
+                for symbol, row in cached.items()
+            }
+        if required_symbols:
+            self._market_data_stats.db_missing_count += len(required_symbols - set(cached))
         rows_twse = self._safe_get_json(TWSE_BASICS_URL, []) or []
+        twse_payload_id = self._last_persisted_payload_id
         rows_tpex = self._safe_get_json(TPEX_BASICS_URL, []) or []
+        tpex_payload_id = self._last_persisted_payload_id
+        self._basics_payload_ids = {"TWSE": twse_payload_id, "TPEx": tpex_payload_id}
         self._basics_payload_hash = self._payload_sha256({"twse": rows_twse, "tpex": rows_tpex})
         merged: dict[str, dict[str, Any]] = {}
         for row in rows_twse:
@@ -1825,9 +1906,37 @@ class TwMarketProvider:
             }
         return merged
 
-    def _load_latest_revenue_map(self) -> dict[str, dict[str, Any]]:
+    def _load_latest_revenue_map(
+        self,
+        *,
+        as_of: date | None = None,
+        required_symbols: set[str] | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        lookup_date = as_of or date.today()
+        cached = get_latest_monthly_revenue(
+            self.market_data_db_path,
+            as_of=lookup_date,
+            symbols=required_symbols,
+        )
+        if cached and (required_symbols is None or required_symbols.issubset(cached)):
+            self._market_data_stats.db_hit_count += 1
+            return {
+                symbol: {
+                    "industry": str(row.get("industry") or "").strip(),
+                    "monthly_revenue": safe_float(row.get("monthly_revenue")) or 0.0,
+                    "revenue_mom": row.get("revenue_mom"),
+                    "revenue_yoy": row.get("revenue_yoy"),
+                    "revenue_month": str(row.get("revenue_month") or "").strip(),
+                }
+                for symbol, row in cached.items()
+            }
+        if required_symbols:
+            self._market_data_stats.db_missing_count += len(required_symbols - set(cached))
         rows_twse = self._safe_get_json(TWSE_REVENUE_URL, []) or []
+        twse_payload_id = self._last_persisted_payload_id
         rows_tpex = self._safe_get_json(TPEX_REVENUE_URL, []) or []
+        tpex_payload_id = self._last_persisted_payload_id
+        self._revenue_payload_ids = {"TWSE": twse_payload_id, "TPEx": tpex_payload_id}
         self._revenue_payload_hash = self._payload_sha256({"twse": rows_twse, "tpex": rows_tpex})
         mapped: dict[str, dict[str, Any]] = {}
         for row in rows_twse:
@@ -1935,6 +2044,9 @@ class TwMarketProvider:
             validator=self._valid_tpex_bulk_payload,
             use_cache=not force_network,
         )
+        payload_id = self._last_persisted_payload_id
+        payload_hash = self._payload_sha256(payload)
+        payload_source_url = self._last_resolved_source_url or request.full_url
         tables = payload.get("tables") or []
         table = tables[0] if tables and isinstance(tables[0], dict) else {}
         fields = table.get("fields") or []
@@ -1978,6 +2090,9 @@ class TwMarketProvider:
                 row[field_indexes["volume"]],
             )
             if candle is not None:
+                candle["_source_payload_id"] = payload_id
+                candle["_source_payload_sha256"] = payload_hash
+                candle["_source_url"] = payload_source_url
                 mapping[symbol] = candle
         self._tpex_daily_quotes_cache[day] = mapping
         return mapping
@@ -2020,6 +2135,7 @@ class TwMarketProvider:
         source_cache_file: str,
         source_payload_sha256: str,
         source_priority: int = 100,
+        source_payload_id: str | None = None,
     ) -> VerifiedDailyBar:
         return VerifiedDailyBar(
             market=market,
@@ -2036,6 +2152,7 @@ class TwMarketProvider:
             source_payload_sha256=source_payload_sha256,
             source_fetched_at=datetime.now().astimezone().isoformat(),
             source_priority=source_priority,
+            source_payload_id=source_payload_id,
         )
 
     def _record_market_payload(
@@ -2050,8 +2167,9 @@ class TwMarketProvider:
         source_url = self._last_resolved_source_url or request.full_url
         body = request.data if isinstance(request.data, (bytes, bytearray)) else b""
         payload_hash = self._payload_sha256(payload)
+        self._last_source_payload_id = None
         try:
-            record_source_payload(
+            payload_id = record_source_payload(
                 self.market_data_db_path,
                 dataset_key=dataset_key,
                 request_method=request.get_method(),
@@ -2065,10 +2183,12 @@ class TwMarketProvider:
                 validation_status=validation_status,
                 raw_storage_root=self.cache_dir / "raw_payloads",
             )
+            self._last_source_payload_id = payload_id
             return payload_hash
         except Exception:
             # Raw-payload persistence is audit enrichment. It must not turn a
             # valid official bar into a failed ranking because SQLite is busy.
+            self._last_source_payload_id = None
             return payload_hash
 
     def _fetch_twse_month_bars(
@@ -2119,6 +2239,7 @@ class TwMarketProvider:
                     source_cache_file=str(self._cache_path(requests[0])),
                     source_payload_sha256=payload_hash,
                     source_priority=10 if source_url.startswith(TWSE_STOCK_DAY_PRIMARY_URL) else 20,
+                    source_payload_id=self._last_source_payload_id,
                 )
             )
         return bars
@@ -2174,6 +2295,7 @@ class TwMarketProvider:
                         source_cache_file=str(self._cache_path(requests[0])),
                         source_payload_sha256=payload_hash,
                         source_priority=10 if requests[0].get_method() == "GET" else 20,
+                        source_payload_id=self._last_source_payload_id,
                     )
                 )
             return bars
@@ -2198,7 +2320,7 @@ class TwMarketProvider:
                         "o": "json",
                     },
                 )
-                source_url = self._last_resolved_source_url or day_request.full_url
+                source_url = str(candle.get("_source_url") or day_request.full_url)
                 bars.append(
                     self._verified_bar_from_candle(
                         market="TPEx",
@@ -2207,14 +2329,33 @@ class TwMarketProvider:
                         source_endpoint="tpex.daily_quotes",
                         source_url=source_url,
                         source_cache_file=str(self._cache_path(day_request)),
-                        source_payload_sha256=self._payload_sha256({"symbol": symbol, **candle}),
+                        source_payload_sha256=str(candle.get("_source_payload_sha256") or self._payload_sha256({"symbol": symbol, **candle})),
                         source_priority=30,
+                        source_payload_id=candle.get("_source_payload_id"),
                     )
                 )
             return bars
 
-    def get_ohlcv(self, symbol: str, market: str, as_of: date, lookback: int = 252) -> list[dict[str, Any]]:
-        cache_key = (symbol, market, as_of.isoformat(), lookback, _is_weekday(as_of))
+    def get_ohlcv(
+        self,
+        symbol: str,
+        market: str,
+        as_of: date,
+        lookback: int = 252,
+        from_date: date | None = None,
+        require_current_day: bool = True,
+    ) -> list[dict[str, Any]]:
+        if from_date is not None and from_date > as_of:
+            raise ValueError("from_date cannot be later than as_of")
+        cache_key = (
+            symbol,
+            market,
+            as_of.isoformat(),
+            lookback,
+            _is_weekday(as_of),
+            from_date.isoformat() if from_date else None,
+            require_current_day,
+        )
         if cache_key in self._ohlcv_cache:
             return self._ohlcv_cache[cache_key]
         cached = get_bars(
@@ -2222,20 +2363,32 @@ class TwMarketProvider:
             market=market,
             symbol=symbol,
             as_of=as_of,
-            limit=max(lookback, 1),
+            limit=None if from_date is not None else max(lookback, 1),
         )
         expected = as_of if _is_weekday(as_of) else (cached[-1]["date"] if cached else None)
-        current_day_ready = not _is_weekday(as_of) or is_current_day_verified(
+        current_day_ready = not require_current_day or not _is_weekday(as_of) or is_current_day_verified(
             self.market_data_db_path,
             market=market,
             symbol=symbol,
             trade_date=as_of,
         )
-        if len(cached) >= lookback and (expected is None or cached[-1]["date"] == expected) and current_day_ready:
+        range_ready = (
+            from_date is None
+            or (bool(cached) and cached[0]["date"] <= from_date)
+        )
+        if (
+            (len(cached) >= lookback if from_date is None else range_ready)
+            and (expected is None or cached[-1]["date"] == expected)
+            and current_day_ready
+        ):
             self._market_data_stats.db_hit_count += 1
-            if _is_weekday(as_of):
+            if require_current_day and _is_weekday(as_of):
                 self._market_data_stats.current_day_verified_count += 1
-            candles = cached[-lookback:]
+            candles = (
+                cached[-lookback:]
+                if from_date is None
+                else [item for item in cached if item["date"] >= from_date]
+            )
             self._ohlcv_cache[cache_key] = candles
             return candles
 
@@ -2245,9 +2398,20 @@ class TwMarketProvider:
         fetched: list[VerifiedDailyBar] = []
         errors: list[str] = []
         network_current_day_seen = False
-        need_historical = len(cached) < lookback
+        need_historical = (
+            len(cached) < lookback
+            if from_date is None
+            else not cached or cached[0]["date"] > from_date
+        )
         anchor = date(as_of.year, as_of.month, 1)
-        max_months = max(6, (lookback // 18) + 6)
+        if from_date is not None:
+            month_span = max(
+                0,
+                (anchor.year - from_date.year) * 12 + anchor.month - from_date.month,
+            )
+            max_months = max(6, month_span + 3)
+        else:
+            max_months = max(6, (lookback // 18) + 6)
         for index in range(max_months):
             month_start = _shift_month(anchor, -index)
             if index > 0 and not need_historical:
@@ -2277,7 +2441,10 @@ class TwMarketProvider:
                 if bar.trade_date not in known_dates:
                     fetched.append(bar)
                     known_dates.add(bar.trade_date)
-            if len(known_dates) >= lookback:
+            if from_date is not None:
+                if known_dates and min(known_dates) <= from_date:
+                    break
+            elif len(known_dates) >= lookback:
                 break
 
         if fetched:
@@ -2294,14 +2461,23 @@ class TwMarketProvider:
             market=market,
             symbol=symbol,
             as_of=as_of,
-            limit=max(lookback, 1),
+            limit=None if from_date is not None else max(lookback, 1),
         )
-        if len(candles) < lookback:
+        if from_date is None and len(candles) < lookback:
             detail = f"；最近錯誤：{' | '.join(errors[-3:])}" if errors else ""
             raise MarketDataFetchError(
                 f"{market} {symbol} 日線不足：{len(candles)}/{lookback}{detail}",
                 [{"symbol": symbol, "market": market, "error": error} for error in errors],
             )
+        if from_date is not None:
+            range_candles = [item for item in candles if item["date"] >= from_date]
+            if not range_candles or range_candles[0]["date"] > from_date:
+                detail = f"；最近錯誤：{' | '.join(errors[-3:])}" if errors else ""
+                actual = candles[0]["date"].isoformat() if candles else None
+                raise MarketDataFetchError(
+                    f"{market} {symbol} 歷史區間缺口：expected_from={from_date.isoformat()} actual_from={actual}{detail}",
+                    [{"symbol": symbol, "market": market, "error": error} for error in errors],
+                )
         if _is_weekday(as_of) and candles[-1]["date"] != as_of:
             self._market_data_stats.current_day_failure_count += 1
             actual = candles[-1]["date"].isoformat() if candles else None
@@ -2310,7 +2486,7 @@ class TwMarketProvider:
                 f"{market} {symbol} 當日資料缺口：expected={as_of.isoformat()} actual={actual}{detail}",
                 [{"symbol": symbol, "market": market, "error": error} for error in errors],
             )
-        if _is_weekday(as_of):
+        if require_current_day and _is_weekday(as_of):
             if network_current_day_seen:
                 mark_current_day_verified(
                     self.market_data_db_path,
@@ -2329,7 +2505,11 @@ class TwMarketProvider:
                     f"{market} {symbol} 當日資料未經目前來源驗證：expected={as_of.isoformat()}",
                 )
             self._market_data_stats.current_day_verified_count += 1
-        candles = candles[-lookback:]
+        candles = (
+            candles[-lookback:]
+            if from_date is None
+            else [item for item in candles if item["date"] >= from_date]
+        )
         self._ohlcv_cache[cache_key] = candles
         return candles
 
@@ -2413,6 +2593,21 @@ class TwMarketProvider:
         return sorted(dedup.values(), key=lambda x: x["date"])[-lookback:]
 
     def get_latest_valuation(self, symbol: str, market: str, as_of: date, max_backtrack_days: int = 20) -> dict[str, float] | None:
+        self._last_persisted_payload_id = None
+        cached = get_valuation_snapshot_as_of(
+            self.market_data_db_path,
+            market=market,
+            symbol=symbol,
+            as_of=as_of,
+            max_backtrack_days=max_backtrack_days,
+        )
+        if cached is not None:
+            self._market_data_stats.db_hit_count += 1
+            return {
+                "pe": float(cached["pe"] or 0.0),
+                "pb": float(cached["pb"] or 0.0),
+                "dividend_yield": float(cached["dividend_yield"] or 0.0),
+            }
         if market == "TPEx":
             result = self._get_tpex_latest_valuation(symbol, as_of, max_backtrack_days)
             source_endpoint = "tpex.peQryDate"
@@ -2434,6 +2629,8 @@ class TwMarketProvider:
                     source_endpoint=source_endpoint,
                     source_url=source_url,
                     fetched_at=datetime.now().astimezone().isoformat(),
+                    source_payload_id=self._last_persisted_payload_id,
+                    available_date=as_of,
                 )
             except Exception:
                 pass

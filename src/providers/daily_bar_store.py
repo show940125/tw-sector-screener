@@ -29,6 +29,7 @@ class VerifiedDailyBar:
     source_payload_sha256: str
     source_fetched_at: str
     source_priority: int = 100
+    source_payload_id: str | None = None
     effective_date: date | None = None
     published_at: str | None = None
 
@@ -208,6 +209,8 @@ def init_db(db_path: Path) -> None:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN effective_date TEXT")
             if "published_at" not in columns:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN published_at TEXT")
+            if "source_payload_id" not in columns:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN source_payload_id TEXT")
         sync_state_columns = {
             str(row[1]) for row in conn.execute("PRAGMA table_info(daily_bar_sync_state)").fetchall()
         }
@@ -272,6 +275,7 @@ def _bar_params(bar: VerifiedDailyBar, imported_at: str) -> dict[str, Any]:
         "source_url": bar.source_url,
         "source_cache_file": bar.source_cache_file,
         "source_payload_sha256": bar.source_payload_sha256,
+        "source_payload_id": bar.source_payload_id,
         "source_fetched_at": bar.source_fetched_at,
         "source_priority": bar.source_priority,
         "imported_at": imported_at,
@@ -295,12 +299,12 @@ def _record_source(conn: sqlite3.Connection, bar: VerifiedDailyBar, imported_at:
         INSERT INTO daily_bar_sources(
             market, symbol, trade_date, source_endpoint, source_url,
             source_cache_file, source_payload_sha256, source_fetched_at,
-            source_priority, validation_status, validation_error, imported_at,
-            effective_date, published_at
+            source_payload_id, source_priority, validation_status, validation_error,
+            imported_at, effective_date, published_at
         ) VALUES(
             :market, :symbol, :trade_date, :source_endpoint, :source_url,
             :source_cache_file, :source_payload_sha256, :source_fetched_at,
-            :source_priority, 'verified', NULL, :imported_at,
+            :source_payload_id, :source_priority, 'verified', NULL, :imported_at,
             :effective_date, :published_at
         )
         ON CONFLICT(
@@ -309,6 +313,7 @@ def _record_source(conn: sqlite3.Connection, bar: VerifiedDailyBar, imported_at:
             source_endpoint=excluded.source_endpoint,
             source_cache_file=excluded.source_cache_file,
             source_fetched_at=excluded.source_fetched_at,
+            source_payload_id=excluded.source_payload_id,
             source_priority=excluded.source_priority,
             validation_status=excluded.validation_status,
             validation_error=excluded.validation_error,
@@ -318,6 +323,23 @@ def _record_source(conn: sqlite3.Connection, bar: VerifiedDailyBar, imported_at:
         """,
         params,
     )
+    if bar.source_payload_id:
+        source_link_table = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='market_data_source_links'"
+        ).fetchone()
+        if source_link_table is not None:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO market_data_source_links(
+                    dataset_key, record_identity, payload_id, linked_at
+                ) VALUES('daily_bars', ?, ?, ?)
+                """,
+                (
+                    f"{bar.market}|{bar.symbol}|{bar.trade_date.isoformat()}",
+                    bar.source_payload_id,
+                    imported_at,
+                ),
+            )
 
 
 def _upsert_bar(
@@ -347,6 +369,7 @@ def _upsert_bar(
                 source_cache_file=:source_cache_file,
                 source_payload_sha256=:source_payload_sha256,
                 source_fetched_at=:source_fetched_at,
+                source_payload_id=:source_payload_id,
                 source_priority=:source_priority, imported_at=:imported_at,
                 data_status='verified', effective_date=:effective_date,
                 published_at=:published_at
@@ -361,11 +384,12 @@ def _upsert_bar(
             market, symbol, trade_date, open, high, low, close, volume,
             source_endpoint, source_url, source_cache_file,
             source_payload_sha256, source_fetched_at, source_priority,
-            imported_at, data_status, effective_date, published_at
+            source_payload_id, imported_at, data_status, effective_date, published_at
         ) VALUES(
             :market, :symbol, :trade_date, :open, :high, :low, :close, :volume,
             :source_endpoint, :source_url, :source_cache_file,
             :source_payload_sha256, :source_fetched_at, :source_priority,
+            :source_payload_id,
             :imported_at, 'verified', :effective_date, :published_at
         )
         """,
@@ -515,7 +539,8 @@ def get_bars(
     query = (
             "SELECT market, symbol, trade_date, open, high, low, close, volume, "
             "source_endpoint, source_url, source_cache_file, source_payload_sha256, "
-            "source_fetched_at, source_priority, imported_at, effective_date, published_at "
+            "source_payload_id, source_fetched_at, source_priority, imported_at, "
+            "effective_date, published_at "
         "FROM daily_bars WHERE "
         + " AND ".join(conditions)
         + " ORDER BY trade_date DESC"

@@ -35,7 +35,7 @@ description: Use when screening Taiwan sector/theme stocks and producing researc
 - `E / Actionable Queue`：已補決策梯度，讓 `buying_ranking = 0` 時仍能回答下一步動作
 - `F / Stock Risk Metrics`：已加入單股 Sharpe / Sortino / drawdown / volatility 與 risk-adjusted score，輔助買進排序與研究分析
 - `G / Buying Gate V2`：已把買進榜拆成 `formal_buy`、`risk_adjusted_buy`、`tactical_buy`，讓低風險高 RiskAdj 標的不再被單一 idea 門檻排除
-- `H / Unified Market Data`：canonical `market_data.sqlite` 已升級 schema v2，加入 DB-first 增量 checkpoint、來源/抓取 provenance、品質 issue occurrence 與只讀驗證命令
+- `H / Unified Market Data`：canonical `market_data.sqlite` 已升級 schema v3，加入 DB-first 增量 checkpoint、來源/抓取 provenance、PIT facts、研究資料表、品質 issue occurrence 與只讀驗證命令
 
 ## Canonical Market Data SQLite
 
@@ -43,19 +43,20 @@ description: Use when screening Taiwan sector/theme stocks and producing researc
 
 `%USERPROFILE%\tw-sector-screener-output\cache\market\market_data.sqlite`
 
-它以同一個 SQLite 分開保存 `daily_bars`、由日線派生的 `period_bars`（W/M/Q/Y）、季度與年度財務表、月營收、估值快照、TAIEX/index bars、security master、universe membership、corporate/raw payload metadata、sync runs 與 quality issues。原有 `daily_bars.sqlite` 與 `quarterly_fundamentals.sqlite` 是保留的遷移來源，不是新的寫入目標。
+它以同一個 SQLite 分開保存 `daily_bars`、由日線派生的 `period_bars`（W/M/Q/Y）、季度與年度財務表、月營收、估值快照、TAIEX/index bars、security master、universe membership，以及 v3 的 `financial_fact_observations`、交易狀態、公司行動/adjusted bars、lifecycle、benchmark membership、market stats、法人/融資融券、market events、source links、raw payload、sync runs 與 quality issues。原有 `daily_bars.sqlite` 與 `quarterly_fundamentals.sqlite` 是保留的遷移來源，不是新的寫入目標；研究表已建立 schema/upsert 邊界，但空表或短歷史仍是未完成資料集。
 
-日線 provider 採 DB-first：已有至少 253 根 verified bars 且最新交易日符合 `as_of` 時只讀 SQLite；只在缺少歷史區間或當月/當日尾端時增量抓取。正常交易日若最新 verified bar 不等於 `as_of`，會 fail-closed，不以舊 cache 冒充當日收盤。所有來源保留 effective/published/fetched timestamps、來源 URL、payload hash、validation status 與 fallback/redirect 診斷，回測仍須遵守 point-in-time 限制。
+日線 provider 採 DB-first：已有至少 253 根 verified bars、最新交易日符合 `as_of` 且 `daily_bar_sync_state.last_current_day_verified_date` 已由來源驗證時只讀 SQLite；只在缺少歷史區間或當月/當日尾端時增量抓取。正常交易日若最新 verified bar 不等於 `as_of`，會 fail-closed，不以舊 cache 冒充當日收盤。所有來源保留 effective/published/fetched timestamps、來源 URL、payload hash、validation status 與 fallback/redirect 診斷，回測仍須遵守 point-in-time 限制。
 
-cache import 是歷史資料整理，不會自動取得當日驗證資格；`daily_bar_sync_state.last_current_day_verified_date` 只有在 provider 通過當日來源回應驗證後才會設定。之後同一 `as_of` 的 DB hit 才可免重查，並在 audit 中記為 current-day verified。
+cache import 是歷史資料整理，不會自動取得當日驗證資格；`daily_bar_sync_state.last_current_day_verified_date` 只有在 provider 通過當日來源回應驗證後才會設定。之後同一 `as_of` 的 DB hit 才可免重查，並在 audit 中記為 current-day verified。缺少發布日的財務/事件資料可以留在 DB 或 quarantine，但不能進正式 PIT query。
 
 統一 DB 的 `market_data_sync_state` 會從既有 canonical rows 建立 `migrated` checkpoint，僅代表 SQLite 已有的資料範圍；只有增量同步重新驗證來源後才會更新為 `verified`。
 
 先同步 curated coverage 日線與 benchmark：
 
 ```powershell
-Set-Location -LiteralPath "$env:USERPROFILE\.codex\skills\tw-sector-screener"
+Set-Location -LiteralPath 'C:\Users\a0953041880\.codex\skills\tw-sector-screener'
 python scripts\sync_market_data.py `
+  --profile daily `
   --themes AI,半導體 `
   --universe-mode coverage `
   --as-of 2026-04-29 `
@@ -66,17 +67,19 @@ python scripts\sync_market_data.py `
   --database "$env:USERPROFILE\tw-sector-screener-output\cache\market\market_data.sqlite"
 ```
 
+`daily` 省略 `--from-date` 時會取得 `lookback` window；只有明確傳入 `--from-date` 才會以日期範圍讀取/補抓。歷史回補使用 `--profile enrichment --from-date YYYY-MM-DD --to-date YYYY-MM-DD`，不要塞進日報 watchdog。同步命令若選到尚未交付的 dataset，會輸出 `not_implemented` 並以非零 exit code 結束，不能被當成成功。
+
 cache import、遷移與 integrity 可重跑驗證；import 是來源整理，不等同於當日驗證，當日 gate 由 sync/provider 最後確認：
 
 ```powershell
-Set-Location -LiteralPath "$env:USERPROFILE\.codex\skills\tw-sector-screener"
+Set-Location -LiteralPath 'C:\Users\a0953041880\.codex\skills\tw-sector-screener'
 python -c "from pathlib import Path; from src.providers.market_data_store import ensure_market_data_db, database_integrity; p=Path.home()/'tw-sector-screener-output'/'cache'/'market'; ensure_market_data_db(p/'market_data.sqlite', daily_source=p/'daily_bars.sqlite', quarterly_source=p/'quarterly_fundamentals.sqlite'); print(database_integrity(p/'market_data.sqlite'))"
 ```
 
 只讀驗證（不初始化、不遷移、不改 DB）：
 
 ```powershell
-Set-Location -LiteralPath "$env:USERPROFILE\.codex\skills\tw-sector-screener"
+Set-Location -LiteralPath 'C:\Users\a0953041880\.codex\skills\tw-sector-screener'
 python scripts\verify_market_data.py `
   --database "$env:USERPROFILE\tw-sector-screener-output\cache\market\market_data.sqlite" `
   --themes AI,半導體 `
@@ -170,7 +173,9 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_univers
 - `--output-root`
 - `--output-dir`（deprecated）
 - `--market-database`：canonical `market_data.sqlite` 路徑
-- `scripts/sync_market_data.py --datasets ... --mode incremental|full --dry-run`：市場資料同步契約
+- `--profile`：`daily | enrichment`
+- `--from-date` / `--to-date`：真正的歷史同步範圍；daily 的 to-date 必須等於 as-of
+- `scripts/sync_market_data.py --profile ... --datasets ... --mode incremental|full --dry-run`：市場資料同步契約
 
 ## Output Contract
 
@@ -185,6 +190,8 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\tw_sector_univers
 - `decisions/decision-ledger.sqlite`
 
 coverage gate 未通過時，報告可以輸出新鮮的診斷 artifacts，但不得建立可誤用的 decision ledger 或 validation backtest。
+
+市場資料同步 manifest 位於 `audit/<yyyymmdd>/market-sync-<yyyymmdd>.json/.md`；必須揭露 profile、requested range、DB hits、network requests、missing partitions、fallback、source warnings 與 integrity。`verify_market_data.py` 是 read-only gate，正常交易日還檢查 current-day marker；schema/PIT/adapter 契約見 `docs/market-data-database-development.md`，PowerShell 與 210 秒 watchdog 規則見 `docs/market-data-operations.md`。
 
 Validation v3 contract：
 - `validation_summary.mode = validation_report_v3`
@@ -224,7 +231,7 @@ Validation v3 contract：
 - `recommendation` 是研究建議評估；LLM review 不改 deterministic ranking。
 - `macro_regime_overlay` 是 supplementary risk overlay，只能影響 risk/action，不得直接升級 ranking。
 - 每日 16:30 盤後自動化執行 market-data sync 與 AI / 半導體研究報告；當日為正常交易日時，日線最新 verified bar 必須等於 `as_of`，否則整個主題輸出標記 failed。
-- canonical market data 先查 SQLite；完整 253 根且 current-day marker 已驗證時為 DB hit，不逐月重抓。缺少歷史區間只補 missing range；大型 raw payload 以 hash/URI 外置並由 integrity check 驗證。
+- canonical market data 先查 SQLite；完整 253 根且 current-day marker 已驗證時為 DB hit，不逐月重抓。缺少歷史區間只補 missing range；legacy migration 以 size/mtime fingerprint 去重；大型 raw payload 以 hash/URI 外置並由 integrity check 驗證。
 - schema 與資料表契約見 [docs/market-data-database-development.md](docs/market-data-database-development.md)；資料補齊順序見 [docs/market-data-completion-roadmap.md](docs/market-data-completion-roadmap.md)，PowerShell／sync／verify／watchdog 操作見 [docs/market-data-operations.md](docs/market-data-operations.md)。
 - repo 以 `Feature Branch + PR` 維護，分支名稱固定使用 `codex/` 前綴。
 - 官方執行輸出固定放在 `%USERPROFILE%\tw-sector-screener-output`，不進 git；repo 內只保留 `examples/sample-reports/` 樣本。

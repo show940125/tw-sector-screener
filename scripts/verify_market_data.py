@@ -75,6 +75,18 @@ def _bar_check(
     count = int(row["row_count"] or 0)
     distinct_dates = int(row["distinct_dates"] or 0)
     latest = str(row["latest_trade_date"]) if row["latest_trade_date"] else None
+    sync_state = conn.execute(
+        """
+        SELECT last_current_day_verified_date
+        FROM daily_bar_sync_state
+        WHERE market = ? AND symbol = ?
+        """,
+        (market, symbol),
+    ).fetchone()
+    current_day_verified = bool(
+        sync_state is not None
+        and str(sync_state["last_current_day_verified_date"] or "") == as_of.isoformat()
+    )
     errors: list[str] = []
     if count < lookback:
         errors.append(f"history_short:{count}/{lookback}")
@@ -82,6 +94,8 @@ def _bar_check(
         errors.append("duplicate_trade_dates")
     if as_of.weekday() < 5 and latest != as_of.isoformat():
         errors.append(f"current_day_missing:expected={as_of.isoformat()} actual={latest}")
+    if as_of.weekday() < 5 and not current_day_verified:
+        errors.append(f"current_day_unverified:expected={as_of.isoformat()}")
     return {
         "market": market,
         "symbol": symbol,
@@ -89,6 +103,7 @@ def _bar_check(
         "distinct_trade_date_count": distinct_dates,
         "first_trade_date": row["first_trade_date"],
         "latest_trade_date": latest,
+        "current_day_verified": current_day_verified,
         "status": "verified" if not errors else "failed",
         "errors": errors,
     }
@@ -119,6 +134,11 @@ def verify_database(
         "themes_result": {},
         "errors": [],
         "warnings": [],
+        "research_dataset_counts": {},
+        "pit_query_contract": {
+            "available": False,
+            "rule": "effective_date <= observation_date and available/published date <= information_cutoff",
+        },
     }
     try:
         conn = _read_only_connect(database_path)
@@ -136,13 +156,74 @@ def verify_database(
             for row in conn.execute("SELECT key, value FROM schema_meta").fetchall()
         }
         payload["schema_meta"] = meta
+        existing_tables = {
+            str(row[0])
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        external_payload_missing: list[str] = []
+        if "source_payloads" in existing_tables:
+            for row in conn.execute(
+                "SELECT payload_id, storage_uri FROM source_payloads "
+                "WHERE storage_mode = 'external' AND storage_uri IS NOT NULL"
+            ).fetchall():
+                storage_uri = str(row["storage_uri"])
+                if not Path(storage_uri).exists():
+                    external_payload_missing.append(str(row["payload_id"]))
+        payload["source_payload_integrity"] = {
+            "external_payload_missing": external_payload_missing,
+            "status": "verified" if not external_payload_missing else "failed",
+        }
+        if external_payload_missing:
+            payload["errors"].append(
+                "external_payload_missing:" + ",".join(external_payload_missing)
+            )
         try:
             schema_version = int(meta.get("market_data_schema_version", "0"))
         except ValueError:
             schema_version = 0
         payload["schema_version"] = schema_version
-        if schema_version < 2:
-            payload["errors"].append(f"schema_version_below_v2:{schema_version}")
+        if schema_version < 3:
+            payload["errors"].append(f"schema_version_below_v3:{schema_version}")
+        required_research_tables = (
+            "financial_fact_observations",
+            "market_sessions",
+            "security_trading_status",
+            "adjustment_factors",
+            "adjusted_bars",
+            "security_lifecycle",
+            "benchmark_membership",
+            "daily_market_stats",
+            "institutional_flows",
+            "margin_short_snapshots",
+            "market_events",
+            "market_data_source_links",
+        )
+        missing_research_tables = [
+            table for table in required_research_tables if table not in existing_tables
+        ]
+        payload["research_dataset_counts"] = {
+            table: (
+                int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                if table in existing_tables
+                else None
+            )
+            for table in required_research_tables
+        }
+        payload["research_schema"] = {
+            "required_tables": list(required_research_tables),
+            "missing_tables": missing_research_tables,
+        }
+        payload["pit_query_contract"] = {
+            "available": not missing_research_tables and schema_version >= 3,
+            "rule": "effective_date <= observation_date and available/published date <= information_cutoff",
+            "missing_tables": missing_research_tables,
+        }
+        if missing_research_tables:
+            payload["errors"].append(
+                "research_schema_missing:" + ",".join(missing_research_tables)
+            )
         if integrity != "ok":
             payload["errors"].append(f"sqlite_integrity:{integrity}")
         if foreign_keys:

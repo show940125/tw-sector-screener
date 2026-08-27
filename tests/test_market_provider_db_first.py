@@ -117,6 +117,47 @@ class MarketProviderDbFirstTests(unittest.TestCase):
             self.assertEqual(series[-1]["date"], date(2026, 8, 26))
             self.assertEqual(provider.get_market_data_diagnostics()["db_hit_count"], 1)
 
+    def test_explicit_from_date_expands_db_read_range(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "market_data.sqlite"
+            import_verified_bars(
+                db_path,
+                [
+                    VerifiedDailyBar(
+                        market="TWSE",
+                        symbol="2330",
+                        trade_date=day,
+                        open=100.0,
+                        high=101.0,
+                        low=99.0,
+                        close=100.0,
+                        volume=1000.0,
+                        source_endpoint="seed",
+                        source_url="https://seed",
+                        source_cache_file="seed.json",
+                        source_payload_sha256=f"seed-{day}",
+                        source_fetched_at="2026-01-10T00:00:00+08:00",
+                    )
+                    for day in (date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 5))
+                ]
+            )
+            mark_current_day_verified(
+                db_path,
+                market="TWSE",
+                symbol="2330",
+                trade_date=date(2026, 1, 5),
+            )
+            provider = TwMarketProvider(cache_dir=Path(tmp), market_database_path=db_path)
+            with patch.object(provider, "_fetch_twse_month_bars", side_effect=AssertionError("network")):
+                bars = provider.get_ohlcv(
+                    "2330",
+                    "TWSE",
+                    date(2026, 1, 5),
+                    lookback=1,
+                    from_date=date(2026, 1, 1),
+                )
+            self.assertEqual([item["date"] for item in bars], [date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 5)])
+
 
 if __name__ == "__main__":
     unittest.main()
