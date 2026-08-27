@@ -306,7 +306,7 @@ python scripts\verify_market_data.py `
   --benchmark TAIEX
 ```
 
-市場資料 schema、PIT 限制、raw payload 政策與分階段回補路線見 [docs/market-data-database-development.md](docs/market-data-database-development.md)。
+市場資料 schema、PIT 限制、raw payload 政策與分階段回補路線見 [docs/market-data-database-development.md](docs/market-data-database-development.md)；資料缺口的實作順序見 [docs/market-data-completion-roadmap.md](docs/market-data-completion-roadmap.md)，PowerShell 執行與 watchdog 規則見 [docs/market-data-operations.md](docs/market-data-operations.md)。
 
 canonical DB 會同時保留 `effective_date`、`published_at`、`fetched_at`、來源 URL、payload hash、validation status 與 fallback/redirect 診斷；回測不得把發布日晚於觀察日的資料前置使用。
 

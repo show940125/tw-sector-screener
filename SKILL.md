@@ -225,6 +225,6 @@ Validation v3 contract：
 - `macro_regime_overlay` 是 supplementary risk overlay，只能影響 risk/action，不得直接升級 ranking。
 - 每日 16:30 盤後自動化執行 market-data sync 與 AI / 半導體研究報告；當日為正常交易日時，日線最新 verified bar 必須等於 `as_of`，否則整個主題輸出標記 failed。
 - canonical market data 先查 SQLite；完整 253 根且 current-day marker 已驗證時為 DB hit，不逐月重抓。缺少歷史區間只補 missing range；大型 raw payload 以 hash/URI 外置並由 integrity check 驗證。
-- schema 與資料表契約見 [docs/market-data-database-development.md](docs/market-data-database-development.md)。
+- schema 與資料表契約見 [docs/market-data-database-development.md](docs/market-data-database-development.md)；資料補齊順序見 [docs/market-data-completion-roadmap.md](docs/market-data-completion-roadmap.md)，PowerShell／sync／verify／watchdog 操作見 [docs/market-data-operations.md](docs/market-data-operations.md)。
 - repo 以 `Feature Branch + PR` 維護，分支名稱固定使用 `codex/` 前綴。
 - 官方執行輸出固定放在 `%USERPROFILE%\tw-sector-screener-output`，不進 git；repo 內只保留 `examples/sample-reports/` 樣本。

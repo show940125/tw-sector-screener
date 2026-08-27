@@ -1,0 +1,22 @@
+{
+  "archive_name": "tw-sector-simulator",
+  "archive_version": 1,
+  "archived_at": "2026-08-27",
+  "status": "historical_only",
+  "purpose": "Preserve the former investment simulator and publication workflow as repository history.",
+  "current_workflow": "The active workflow is the DB-first AI and 半導體 research report path.",
+  "entries": [
+    {"from": "scripts/tw_sector_investment_simulator.py", "to": "program/scripts/tw_sector_investment_simulator.py"},
+    {"from": "scripts/publish_pages_dashboard.py", "to": "program/scripts/publish_pages_dashboard.py"},
+    {"from": "scripts/publish_latest_dashboard_to_pages.py", "to": "program/scripts/publish_latest_dashboard_to_pages.py"},
+    {"from": "src/simulator/", "to": "program/src/simulator/"},
+    {"from": "tests/test_simulator_*.py", "to": "program/tests/test_simulator_*.py"},
+    {"from": "simulator.config.example.json", "to": "program/simulator.config.example.json"},
+    {"from": ".github/workflows/daily-dashboard.yml", "to": "program/.github/workflows/daily-dashboard.yml"},
+    {"from": "CHANGELOG.md", "to": "CHANGELOG.md"}
+  ],
+  "notes": [
+    "The final entry is stored at archive root; the new root CHANGELOG is an active index.",
+    "No SQLite database, runtime output, cache, or generated dashboard artifact is stored in this archive."
+  ]
+}

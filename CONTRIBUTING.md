@@ -26,6 +26,8 @@
   - 必須同步更新 `config.example.json`
 - 若影響 canonical market-data schema、sync 或 provenance：
   - 必須同步更新 `docs/market-data-database-development.md`
+  - 若新增資料集或補齊階段，必須同步更新 `docs/market-data-completion-roadmap.md`
+  - 若新增 CLI／PowerShell 使用方式，必須同步更新 `docs/market-data-operations.md`
   - 必須同步更新 `scripts/verify_market_data.py` 或新增對應驗證測試
   - 不得把 output root 的 SQLite、raw payload、logs 或報告產物加入 repo
 - 若影響報告欄位、watchlist、audit、validation：
@@ -53,6 +55,11 @@
   - `git status` 沒有非預期產物
   - 受影響的樣本輸出已更新
   - 已知限制寫進 PR 說明
+
+## Archive
+
+- 已退役的 simulator 與歷史 release notes 保存在 `archive/simulator/`。
+- archive 是歷史記錄，不是現行命令入口；移動或恢復前須先閱讀其中的 `README.md` 與 `archive-manifest.json`。
 
 ## Release And Tags
 
