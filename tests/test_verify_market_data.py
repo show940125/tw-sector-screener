@@ -71,7 +71,7 @@ class VerifyMarketDataTests(unittest.TestCase):
             self.assertTrue(result["read_only"])
             self.assertEqual(result["themes_result"]["AI"]["verified_count"], 1)
             self.assertEqual(result["benchmark_result"]["status"], "verified")
-            self.assertEqual(result["schema_version"], 3)
+            self.assertEqual(result["schema_version"], 4)
             self.assertIn("financial_fact_observations", result["research_dataset_counts"])
             self.assertTrue(result["pit_query_contract"]["available"])
             self.assertEqual(db_path.stat().st_mtime_ns, before)

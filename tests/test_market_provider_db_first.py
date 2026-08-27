@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import calendar
 from datetime import date, timedelta
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 from src.providers.daily_bar_store import (
@@ -157,6 +159,82 @@ class MarketProviderDbFirstTests(unittest.TestCase):
                     from_date=date(2026, 1, 1),
                 )
             self.assertEqual([item["date"] for item in bars], [date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 5)])
+
+    def test_taiex_history_fetches_beyond_the_old_thirty_six_month_ceiling(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "market_data.sqlite"
+            provider = TwMarketProvider(cache_dir=Path(tmp), market_database_path=db_path)
+            as_of = date(2026, 8, 26)
+
+            def payload_for(request, **kwargs):
+                raw = parse_qs(urlparse(request.full_url).query)["date"][0]
+                month = date(int(raw[:4]), int(raw[4:6]), 1)
+                rows = []
+                ordinal = 0
+                for day_number in range(1, calendar.monthrange(month.year, month.month)[1] + 1):
+                    day = date(month.year, month.month, day_number)
+                    if day.weekday() >= 5 or day > as_of:
+                        continue
+                    rows.append(
+                        [
+                            f"{day.year - 1911:03d}/{day.month:02d}/{day.day:02d}",
+                            f"{10000 + ordinal}",
+                            "1",
+                        ]
+                    )
+                    ordinal += 1
+                return {
+                    "stat": "OK",
+                    "fields": ["日期", "發行量加權股價指數", "漲跌點數"],
+                    "data": rows,
+                }
+
+            with patch.object(provider, "_load_json", side_effect=payload_for) as fetch:
+                series = provider.get_taiex_series(as_of, lookback=1260)
+
+            self.assertEqual(len(series), 1260)
+            self.assertGreater(fetch.call_count, 36)
+            self.assertEqual(series[-1]["date"], as_of)
+
+    def test_historical_revenue_partition_uses_bounded_mops_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "market_data.sqlite"
+            provider = TwMarketProvider(cache_dir=Path(tmp), market_database_path=db_path)
+            html = (
+                "<table><tr><th>公司代號</th><th>營業收入-當月營收</th></tr>"
+                "<tr><td>2330</td><td>100</td></tr></table>"
+            )
+            with patch.object(provider, "_load_text", return_value=html):
+                result = provider.fetch_monthly_revenue_partition(
+                    market="TWSE",
+                    revenue_month="2026-07",
+                    as_of=date(2026, 8, 27),
+                )
+            self.assertEqual(result.request.dataset_key, "monthly_revenue")
+            self.assertEqual(result.request.requested_from, date(2026, 7, 1))
+            self.assertEqual(result.request.requested_to, date(2026, 7, 31))
+            self.assertEqual(
+                parse_qs((result.request.body or b"").decode("utf-8"))["year"],
+                ["115"],
+            )
+
+    def test_valuation_partition_returns_actual_available_trade_date(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "market_data.sqlite"
+            provider = TwMarketProvider(cache_dir=Path(tmp), market_database_path=db_path)
+            payload = {
+                "stat": "OK",
+                "fields": ["證券代號", "本益比", "股價淨值比", "殖利率(%)"],
+                "data": [["2330", "20", "3", "2"]],
+            }
+            with patch.object(provider, "_load_json", return_value=payload):
+                result = provider.fetch_valuation_partition(
+                    market="TWSE",
+                    requested_from=date(2026, 8, 1),
+                    requested_to=date(2026, 8, 27),
+                )
+            self.assertEqual(result.request.requested_to, date(2026, 8, 27))
+            self.assertEqual(result.payload["data"][0][0], "2330")
 
 
 if __name__ == "__main__":

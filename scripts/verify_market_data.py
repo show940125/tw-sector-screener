@@ -3,6 +3,7 @@ from __future__ import annotations
 """Read-only integrity and coverage verification for canonical market_data.sqlite."""
 
 import argparse
+import hashlib
 import json
 import sqlite3
 import sys
@@ -163,29 +164,71 @@ def verify_database(
             ).fetchall()
         }
         external_payload_missing: list[str] = []
+        payload_hash_mismatches: list[str] = []
         if "source_payloads" in existing_tables:
             for row in conn.execute(
-                "SELECT payload_id, storage_uri FROM source_payloads "
-                "WHERE storage_mode = 'external' AND storage_uri IS NOT NULL"
+                "SELECT payload_id, storage_mode, storage_uri, payload_sha256, raw_payload_json "
+                "FROM source_payloads"
             ).fetchall():
-                storage_uri = str(row["storage_uri"])
-                if not Path(storage_uri).exists():
-                    external_payload_missing.append(str(row["payload_id"]))
+                payload_id = str(row["payload_id"])
+                storage_mode = str(row["storage_mode"] or "inline")
+                if storage_mode == "external":
+                    storage_uri = str(row["storage_uri"] or "")
+                    if not storage_uri or not Path(storage_uri).exists():
+                        external_payload_missing.append(payload_id)
+                        continue
+                    actual_hash = hashlib.sha256(Path(storage_uri).read_bytes()).hexdigest()
+                else:
+                    actual_hash = hashlib.sha256(
+                        str(row["raw_payload_json"] or "").encode("utf-8")
+                    ).hexdigest()
+                if actual_hash != str(row["payload_sha256"] or ""):
+                    payload_hash_mismatches.append(payload_id)
+        source_link_orphans: list[str] = []
+        if {"market_data_source_links", "source_payloads"}.issubset(existing_tables):
+            source_link_orphans = [
+                str(row["record_identity"])
+                for row in conn.execute(
+                    """
+                    SELECT link.record_identity
+                    FROM market_data_source_links AS link
+                    LEFT JOIN source_payloads AS payload
+                      ON payload.payload_id = link.payload_id
+                    WHERE payload.payload_id IS NULL
+                    """
+                ).fetchall()
+            ]
         payload["source_payload_integrity"] = {
             "external_payload_missing": external_payload_missing,
-            "status": "verified" if not external_payload_missing else "failed",
+            "hash_mismatches": payload_hash_mismatches,
+            "source_link_orphans": source_link_orphans,
+            "status": (
+                "verified"
+                if not external_payload_missing
+                and not payload_hash_mismatches
+                and not source_link_orphans
+                else "failed"
+            ),
         }
         if external_payload_missing:
             payload["errors"].append(
                 "external_payload_missing:" + ",".join(external_payload_missing)
+            )
+        if payload_hash_mismatches:
+            payload["errors"].append(
+                "source_payload_hash_mismatch:" + ",".join(payload_hash_mismatches)
+            )
+        if source_link_orphans:
+            payload["errors"].append(
+                "source_payload_link_orphan:" + ",".join(source_link_orphans)
             )
         try:
             schema_version = int(meta.get("market_data_schema_version", "0"))
         except ValueError:
             schema_version = 0
         payload["schema_version"] = schema_version
-        if schema_version < 3:
-            payload["errors"].append(f"schema_version_below_v3:{schema_version}")
+        if schema_version < 4:
+            payload["errors"].append(f"schema_version_below_v4:{schema_version}")
         required_research_tables = (
             "financial_fact_observations",
             "market_sessions",
@@ -199,6 +242,9 @@ def verify_database(
             "margin_short_snapshots",
             "market_events",
             "market_data_source_links",
+            "market_data_partition_state",
+            "market_data_gap_ledger",
+            "market_data_completeness_runs",
         )
         missing_research_tables = [
             table for table in required_research_tables if table not in existing_tables
@@ -216,13 +262,142 @@ def verify_database(
             "missing_tables": missing_research_tables,
         }
         payload["pit_query_contract"] = {
-            "available": not missing_research_tables and schema_version >= 3,
+            "available": not missing_research_tables and schema_version >= 4,
             "rule": "effective_date <= observation_date and available/published date <= information_cutoff",
             "missing_tables": missing_research_tables,
         }
         if missing_research_tables:
             payload["errors"].append(
                 "research_schema_missing:" + ",".join(missing_research_tables)
+            )
+        provenance_contract = {
+            "daily_bars": ("effective_date", "available_date", "source_payload_id"),
+            "daily_bar_sources": ("effective_date", "available_date"),
+            "period_bars": ("available_date", "availability_precision"),
+            "index_bars": ("available_date", "source_payload_id", "availability_precision"),
+            "security_master_snapshots": (
+                "effective_date",
+                "available_date",
+                "source_payload_id",
+                "availability_precision",
+            ),
+            "universe_membership": (
+                "effective_from",
+                "available_date",
+                "published_at",
+                "source_payload_id",
+                "availability_precision",
+            ),
+            "monthly_revenue": ("available_date", "availability_precision", "source_payload_id"),
+            "valuation_snapshots": ("available_date", "availability_precision", "source_payload_id"),
+            "annual_company_fundamentals": (
+                "available_date",
+                "availability_precision",
+                "source_payload_id",
+            ),
+            "quarterly_company_fundamentals": (
+                "effective_date",
+                "available_date",
+                "availability_precision",
+                "source_payload_id",
+            ),
+            "financial_fact_observations": (
+                "effective_date",
+                "available_date",
+                "availability_precision",
+                "source_payload_id",
+            ),
+            "corporate_actions": (
+                "action_date",
+                "available_date",
+                "availability_precision",
+                "source_payload_id",
+            ),
+            "market_sessions": (
+                "trade_date",
+                "available_date",
+                "availability_precision",
+                "source_payload_id",
+            ),
+            "security_trading_status": (
+                "effective_date",
+                "available_date",
+                "availability_precision",
+                "source_payload_id",
+            ),
+            "adjustment_factors": (
+                "effective_date",
+                "available_date",
+                "availability_precision",
+                "source_payload_id",
+            ),
+            "adjusted_bars": (
+                "trade_date",
+                "available_date",
+                "derivation_input_sha256",
+            ),
+            "security_lifecycle": (
+                "effective_from",
+                "available_date",
+                "availability_precision",
+                "source_payload_id",
+            ),
+            "benchmark_membership": (
+                "effective_from",
+                "available_date",
+                "availability_precision",
+                "source_payload_id",
+            ),
+            "daily_market_stats": (
+                "trade_date",
+                "available_date",
+                "availability_precision",
+                "source_payload_id",
+            ),
+            "institutional_flows": (
+                "trade_date",
+                "available_date",
+                "availability_precision",
+                "source_payload_id",
+            ),
+            "margin_short_snapshots": (
+                "trade_date",
+                "available_date",
+                "availability_precision",
+                "source_payload_id",
+            ),
+            "market_events": (
+                "available_date",
+                "availability_precision",
+                "source_payload_id",
+            ),
+            "source_payloads": (
+                "effective_date",
+                "available_date",
+                "payload_sha256",
+                "availability_precision",
+            ),
+        }
+        missing_provenance_columns: dict[str, list[str]] = {}
+        for table, required_columns in provenance_contract.items():
+            if table not in existing_tables:
+                continue
+            columns = {
+                str(row[1])
+                for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+            }
+            missing = [column for column in required_columns if column not in columns]
+            if missing:
+                missing_provenance_columns[table] = missing
+        payload["provenance_schema"] = {
+            "required_columns": provenance_contract,
+            "missing_columns": missing_provenance_columns,
+            "status": "verified" if not missing_provenance_columns else "failed",
+        }
+        if missing_provenance_columns:
+            payload["errors"].append(
+                "provenance_columns_missing:"
+                + json.dumps(missing_provenance_columns, ensure_ascii=False, sort_keys=True)
             )
         if integrity != "ok":
             payload["errors"].append(f"sqlite_integrity:{integrity}")

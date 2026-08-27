@@ -105,7 +105,7 @@ python scripts\sync_market_data.py `
 
 ### enrichment：受控的長期回補
 
-歷史回補使用 `--profile enrichment`，明確指定 from/to；不要塞入日報 watchdog。尚未有 validated adapter 的資料集被選中時，命令會輸出 `status=failed`、`not_implemented_datasets` 並以非零 exit code 結束，不能被當成「已處理」。
+歷史回補使用 `--profile enrichment`，明確指定 from/to；不要塞入日報 watchdog。目前 validated adapter 包含 `monthly_revenue`、`valuation_snapshots`、`financial_facts`、`corporate_actions` 與 `market_sessions`。其中月營收的已交付最低批次是 12 個月；財報／公司行動／交易日曆目前是 bounded official snapshot，缺列會記入 gap ledger。尚未有 validated adapter 的資料集被選中時，命令會輸出 `status=failed`、`not_implemented_datasets` 並以非零 exit code 結束，不能被當成「已處理」。
 
 ```powershell
 python scripts\sync_market_data.py `
@@ -115,13 +115,44 @@ python scripts\sync_market_data.py `
   --as-of $day `
   --from-date 2021-01-01 `
   --to-date $day `
-  --datasets 'monthly_revenue' `
+  --datasets 'monthly_revenue,valuation_snapshots' `
   --mode incremental `
   --output-root "$outputRoot" `
   --database "$database"
 ```
 
 注意：`--profile enrichment` 不是「把所有 catalog dataset 靜默跑一遍」；每個 dataset 必須有 adapter、parse、validate、upsert、completeness report 與 PIT tests 後才能納入。
+
+當期研究快照與衍生序列（不抓歷史月營收）可用 bounded command：
+
+```powershell
+python scripts\sync_market_data.py `
+  --profile enrichment `
+  --themes 'AI,半導體' `
+  --universe-mode coverage `
+  --as-of $day `
+  --datasets 'financial_facts,corporate_actions,market_sessions,adjusted_bars' `
+  --mode incremental `
+  --output-root "$outputRoot" `
+  --database "$database"
+```
+
+`financial_facts` 的 `partial` coverage 是可接受的來源邊界警示，不代表缺列可被當成零；正式 PIT query 只選 `verified` 且有可用／發布日期的 fact。`adjusted_bars` 在 adjustment factors 尚未完整以前只表示可重建的研究序列，不得當成正式 ranking input。
+
+`--mode incremental` 會先查 `market_data_partition_state`；當 requested range、payload hash、row count 與 `verified` checkpoint 都符合時，該 partition 只做 DB coverage check，不發網路請求。需要重新驗證來源時才使用 `--mode full`；這是受控 reconcile，不能放入每日 16:30 watchdog。
+
+## 3.1 Migration 前備份與 preflight
+
+任何 schema migration、canonical import 或受控 full reconcile 前，先對來源 SQLite 做一致性備份。備份工具只讀取來源，使用 SQLite backup API，並在備份後再次檢查 integrity、foreign keys、source payload hash/link 與 table-count parity：
+
+```powershell
+python scripts\backup_market_data.py `
+  --database "$database" `
+  --output-dir (Join-Path $outputRoot 'cache\market\backups') `
+  --label 'market-data-pre-migration'
+```
+
+命令成功的必要條件是輸出 manifest 的 `status=complete` 且 `logical_parity=true`。manifest 同時保存來源與備份的 SHA-256；SQLite backup 可能因頁面重組而不同 hash，因此 `sha256_equal=false` 本身不是失敗。若 preflight 或 payload/link 檢查失敗，先處理資料問題，不得進行 migration。來源資料庫不會被刪除或覆寫。
 
 ## 4. Sync → verify → report 順序
 
@@ -138,7 +169,7 @@ python scripts\verify_market_data.py `
   --output (Join-Path $outputRoot "audit\$dayKey\market-data-verify-$dayKey.json")
 ```
 
-`verify_market_data.py` 使用 SQLite `mode=ro`/`query_only`，不初始化、不 migration、不修補。它會檢查 schema v3、SQLite integrity、FK、研究表、每檔 coverage、253 bars、current-day marker 與 TAIEX。非零 exit 或 JSON status 非 `complete` 時，不得開始報告。
+`verify_market_data.py` 使用 SQLite `mode=ro`/`query_only`，不初始化、不 migration、不修補。它會檢查 schema v4、SQLite integrity、FK、研究表、source payload hash/link、每檔 coverage、253 bars、current-day marker 與 TAIEX。非零 exit 或 JSON status 非 `complete` 時，不得開始報告。
 
 報告命令仍必須明確帶：
 
@@ -224,6 +255,7 @@ $exitCode = $process.ExitCode
 | 最新日線不是 as-of | current-day gate 失敗；不可用前一天或舊 cache 補值。 |
 | 308 出現在 audit | 安全導向成功才算 recovered；拒絕/循環/超層數或 fallback 全失敗要保持 failed。 |
 | enrichment 顯示 `not_implemented` | adapter 尚未交付；保留 failed manifest，不能改成 warning 後繼續。 |
+| enrichment 顯示 `partial` | 來源有明確缺列或邊界；查看 `coverage_gaps`／gap ledger，不要以 0 或舊值補上。 |
 
 ## 8. 執行前後 checklist
 

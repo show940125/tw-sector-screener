@@ -1,6 +1,6 @@
 # 統一市場資料 SQLite 開發文件
 
-狀態：`schema v3 foundation delivered`。本輪已交付統一 schema、來源與 PIT 欄位、DB-first 日線增量路徑、safe redirect/fallback、調整後價格的可重建骨架、sync profile 與 read-only verification；深歷史月營收、估值歷史、完整財務 revision、交易狀態、公司行動與法人資料仍須依下方 adapter roadmap 逐項回補，不能把「有表」宣稱成「有完整資料」。
+狀態：`schema v4 + bounded enrichment snapshots delivered`。本輪已交付統一 schema、來源與 PIT 欄位、DB-first 日線增量路徑、分割 checkpoint／缺口 ledger／completeness run、safe redirect/fallback、月營收 12 個月歷史回補、目前財報 facts／公司行動／交易日曆快照 adapter、調整後價格的可重建骨架、sync profile 與 read-only verification；60 個月月營收／估值、20 季／8 年財務 revision、完整交易狀態與法人資料仍須依下方 roadmap 逐項執行，不能把「有表」宣稱成「有完整資料」。
 
 本文件是資料層的產品契約與開發路線圖。它只描述研究資料與可稽核同步，不包含交易、下單、持倉或發布系統。
 
@@ -73,19 +73,21 @@ query(dataset, symbol, observation_date, information_cutoff)
 | `index_bars` | TAIEX 與其他 benchmark bars | production；current-day 仍需逐次驗證 |
 | `security_master_snapshots` | 代號、名稱、產業的 effective snapshot | production path；歷史 lifecycle 尚未完整 |
 | `universe_membership` | theme/market/mode 的有效期間 | production path；歷史 membership 尚待補齊 |
-| `monthly_revenue` | 月營收、MoM、YoY 與可用日 | 現行最新資料 path；60 個月 adapter 尚未完成 |
-| `valuation_snapshots` | PE/PB/殖利率快照 | 現行單點 path；60 個月 adapter 尚未完成 |
+| `monthly_revenue` | 月營收、MoM、YoY 與可用日 | 已完成 54 檔×12 月（648 rows，2025-08～2026-07）；TWSE IIH／TPEx MOPS SPA、DB-first 與分割 checkpoint 已驗證；60 月仍未完成 |
+| `valuation_snapshots` | PE/PB/殖利率快照 | 已有 TWSE/TPEx parser、實際交易日保存、驗證、upsert 與分割 checkpoint；實際 60 個月回補尚未執行 |
 | `quarterly_company_fundamentals` | 相容季度快照 | 已有歷史列，但 PIT/revision completeness 仍為 partial |
-| `annual_company_fundamentals` | 年度財務相容表 | schema/upsert 已有；目前沒有完整回補 adapter |
-| `corporate_actions` | 股利、分割、除權息、減資等事件 | schema/upsert 已有；來源 adapter 尚未完成 |
+| `financial_fact_observations` | PIT 財務 facts | 已寫入目前官方季度快照 212 rows；53/54 coverage 有效值，6415 缺少官方當期列並記錄 gap；20 季／8 年 revision 尚未完成 |
+| `annual_company_fundamentals` | 年度財務相容表 | schema/upsert 已有；年度歷史 adapter 尚未完成，仍為空 |
+| `corporate_actions` | 股利、分割、除權息、減資等事件 | 已接入 TWSE／TPEx 官方當期快照；目前僅寫入本次來源涵蓋事件，完整歷史仍待回補 |
+| `market_sessions` | 官方交易日／假日資訊 | 已接入 TWSE 年度假日快照並映射 TPEx 共用市場日曆；不是完整歷史交易日表 |
 
-已知 live baseline（2026-08-26 盤點）曾為：日線約 23,882 rows、54 檔達 253 根、TAIEX 有資料；季度約 4,708 rows/67 symbols/10 periods；月營收與估值各只有約一個最新快照；年度財務與公司行動仍為空。實際狀態必須以 `verify_market_data.py` 與資料庫盤點當次輸出為準，不能由本段歷史數字推論已完成回補。
+本輪 live enrichment（2026-08-27）已驗證：日線 23,882 rows、54 檔達至少 253 根、TAIEX 有資料；月營收 648 rows／54 檔／12 月；季度相容表約 4,708 rows、PIT facts 目前為官方當期快照；公司行動與交易日曆已非空但仍是當期／年度來源邊界。實際狀態必須以當次 manifest、`verify_market_data.py` 與資料庫盤點為準，不能由歷史數字推論已完成深歷史回補。
 
-### 4.2 v3 研究資料表
+### 4.2 v4 研究資料表
 
-本輪已建立 schema、索引與 typed upsert/query 邊界；表為空不代表資料完成：
+本輪已建立 schema、索引與 typed upsert/query 邊界；已完成的當期快照也不代表資料完成：
 
-- `financial_fact_observations`：季度/年度統一 facts，支援 unit、consolidation、dimension、available/published date 與 revision lineage。
+- `financial_fact_observations`：季度/年度統一 facts，支援 unit、consolidation、dimension、available/published date 與 revision lineage；目前只寫入官方當期 bulk snapshot，缺列明確進 gap ledger。
 - `market_sessions`、`security_trading_status`：交易日、停牌、處置、漲跌停與不可交易狀態。
 - `adjustment_factors`、`adjusted_bars`：公司行動因子與可重建 backward-adjusted/total-return 價格；raw bars 不變。
 - `security_lifecycle`：上市、下市、改名、產業/市場有效期間。
@@ -101,6 +103,10 @@ query(dataset, symbol, observation_date, information_cutoff)
 
 `market_data_dataset_catalog`、`market_data_source_registry`、`source_payloads`、`market_data_fetch_attempts`、`market_data_sync_runs`、`market_data_sync_items`、`market_data_sync_state`、`market_data_sync_issues`、`market_data_quality_issues`、`market_data_quality_issue_occurrences` 與 `market_data_quarantine` 保留作同步狀態、來源、缺口、去重 issue 與未知 payload 隔離。
 
+v4 另加入 `market_data_partition_state`、`market_data_gap_ledger` 與 `market_data_completeness_runs`。前者以 dataset/market/symbol/partition 保存請求範圍、payload hash、row count 與驗證狀態；中者以固定 partition 聚合重複缺口；後者保存一次 completeness gate 的 expected/actual rows、partitions 與缺口清單。這三表是增量同步的控制面，不取代 canonical row 的 provenance。
+
+Migration 前先執行 `scripts\backup_market_data.py`。它會保存來源與備份 SHA-256、schema/integrity/FK、payload hash/link 與 table-count parity manifest；只有 `status=complete` 且 `logical_parity=true` 才可進入下一階段。SQLite backup 的實體檔案 hash 可能因頁面重組而不同，不能用 `sha256_equal` 單獨判定失敗。
+
 `market_data_sync_state.last_status` 的語義分離如下：
 
 - `migrated`：由既有 SQLite 匯入，只有本機存在範圍的證據。
@@ -108,6 +114,7 @@ query(dataset, symbol, observation_date, information_cutoff)
 - `partial`：部分 partition 或欄位可用，仍有明確缺口。
 - `quarantined`：payload 存在但未通過 schema/來源政策。
 - `failed`：本次嘗試未完成，不能重用作 current-day 成功。
+- `not_implemented`：資料集被明確選取，但尚無通過 contract/PIT 測試的可執行來源 adapter；必須以非零狀態結束。
 
 ## 5. DB-first、增量同步與派生資料
 
@@ -121,6 +128,8 @@ provider 啟動時保留 legacy `daily_bars.sqlite` 與 `quarterly_fundamentals.
 4. 當日資料失敗、HTTP 308 被拒絕、資料 schema/日期/OHLCV 驗證失敗或 benchmark 不足時，sync/report fail-closed。
 5. 寫入日線後只重建受影響 symbol 的 `period_bars`；完整 reconcile 仍可明確呼叫 `rebuild_period_bars()`。
 6. `adjusted_bars` 由 raw daily bars 與已驗證 adjustment factor 重建，保留 `derivation_version`、`source_latest_trade_date` 與 hash/rebuild evidence；不回寫 raw close。
+
+歷史 enrichment 以月份或交易日為 partition。只有 checkpoint 的 requested range、payload hash、row count 與 `verified` 狀態同時吻合時才可 DB hit；`--mode full` 會明確略過 checkpoint 以供受控 reconcile。已驗證的 partition 不會因新程序啟動而逐月重查，缺口則只重抓該 partition。
 
 ## 6. Adapter 與 sync contract
 
@@ -137,7 +146,7 @@ upsert()
 completeness_report()
 ```
 
-`DatasetSpec.implemented` 代表目前是否有經測試的可執行 provider path，不代表達成歷史 coverage。現行 daily provider 是既有 façade，registry 已提供重複 key/缺 adapter 的 fail-fast contract；新 dataset 只有在真實 adapter、fixture、PIT 與 completeness tests 通過後，才可把 catalog 狀態改成 implemented。未完成 dataset 被 `sync_market_data.py` 選中時，manifest 會標示 `not_implemented` 並以非零 exit code 結束，不得 silent no-op。
+`DatasetSpec.implemented` 代表目前是否有經測試的可執行 provider path，不代表達成歷史 coverage。現行 daily provider 是既有 façade；validated registry 已正式接入 `monthly_revenue`、`valuation_snapshots`、`financial_facts`、`corporate_actions` 與 `market_sessions`，均由 transport-independent parser、validation、upsert、completeness checkpoint 與 fixture tests 保護。這些 enrichment 目前是 bounded snapshot／12 月月營收，不等於 60 月、20 季或 8 年完整歷史；`annual_fundamentals`、法人、融資融券、market stats 等尚未實作時，被選中會標示 `not_implemented` 並以非零 exit code 結束，不得 silent no-op。
 
 sync manifest 每次要輸出：requested range、expected rows/partitions、actual rows、missing partitions、network requests、DB hits、fallback、redirect/source warnings、failures、integrity 與 profile。`--from-date`/`--to-date` 是真正的 fetch/validation 範圍，不只是 provenance 欄位。
 
@@ -170,7 +179,7 @@ python scripts\sync_market_data.py `
 
 ### 7.2 受控 enrichment profile
 
-歷史回補不塞進 16:30 日報 watchdog；使用明確 range，並只選已有 validated adapter 的資料集。若選到尚未實作 dataset，sync 會輸出 failed manifest 而不是跳過：
+歷史回補不塞進 16:30 日報 watchdog；使用明確 range，並只選已有 validated adapter 的資料集。月營收至少 12 個月的已交付範例與當期研究快照可分開執行；若選到尚未實作 dataset，sync 會輸出 failed manifest 而不是跳過：
 
 ```powershell
 python scripts\sync_market_data.py `
@@ -199,18 +208,18 @@ python scripts\verify_market_data.py `
   --output (Join-Path $outputRoot 'audit\20260827\market-data-verify-20260827.json')
 ```
 
-`verify_market_data.py` 使用 SQLite read-only URI，不初始化、不遷移、不修補 DB；正常交易日還會檢查每檔 `last_current_day_verified_date`。程式內 `query_market_data_as_of()` 與 `query_financial_facts_as_of()` 同樣排除缺少 available/published date 的正式 PIT row。
+`verify_market_data.py` 使用 SQLite read-only URI，不初始化、不遷移、不修補 DB；正常交易日還會檢查每檔 `last_current_day_verified_date`。程式內 `query_market_data_as_of()` 與 `query_financial_facts_as_of()` 同樣排除缺少 available/published date 的正式 PIT row；retrieval-date row 可保留作描述性資料，但不會被正式 PIT 查詢選出。
 
 ## 8. 分階段補齊路線
 
-### Phase 0：正確性與效率（本輪已交付 foundation）
+### Phase 0：正確性與效率（schema v4 foundation 已交付）
 
-- schema v3 tables/indexes、source payload linkage、issue fingerprint dedupe、legacy migration fingerprint。
+- schema v4 tables/indexes、source payload linkage、issue fingerprint dedupe、legacy migration fingerprint、partition checkpoint、gap ledger 與 completeness run。
 - DB-first daily/index/security/revenue path、explicit 308 safe redirect、TWSE fallback、TPEx POST/bulk fallback、current-day fail-closed。
-- daily/enrichment profile、真正的 range arguments、dry-run no network/no DB mutation、unimplemented dataset non-zero failure。
+ - daily/enrichment profile、真正的 range arguments、dry-run no network/no DB mutation、monthly revenue/valuation/financial facts/corporate actions/market sessions validated adapters、unimplemented dataset non-zero failure。
 - read-only integrity/coverage/PIT contract verifier 與受影響 symbol 的 period/adjusted rebuild。
 
-本階段不宣稱已完成深歷史回補；只確保後續回補不再以 silent no-op、舊 cache 或部分 coverage 失敗冒充完成。
+本階段不宣稱已完成深歷史回補；只確保後續回補不再以 silent no-op、舊 cache 或部分 coverage 失敗冒充完成。深歷史回補必須另行執行 enrichment profile 並以 manifest／completeness run 驗收。
 
 ### Phase 1：價格、交易狀態與公司行動
 

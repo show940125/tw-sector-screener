@@ -35,7 +35,7 @@ description: Use when screening Taiwan sector/theme stocks and producing researc
 - `E / Actionable Queue`：已補決策梯度，讓 `buying_ranking = 0` 時仍能回答下一步動作
 - `F / Stock Risk Metrics`：已加入單股 Sharpe / Sortino / drawdown / volatility 與 risk-adjusted score，輔助買進排序與研究分析
 - `G / Buying Gate V2`：已把買進榜拆成 `formal_buy`、`risk_adjusted_buy`、`tactical_buy`，讓低風險高 RiskAdj 標的不再被單一 idea 門檻排除
-- `H / Unified Market Data`：canonical `market_data.sqlite` 已升級 schema v3，加入 DB-first 增量 checkpoint、來源/抓取 provenance、PIT facts、研究資料表、品質 issue occurrence 與只讀驗證命令
+- `H / Unified Market Data`：canonical `market_data.sqlite` 已升級 schema v4，加入 DB-first 增量 checkpoint、partition gap/completeness controls、來源/抓取 provenance、PIT facts、研究資料表、品質 issue occurrence 與只讀驗證命令
 
 ## Canonical Market Data SQLite
 
@@ -43,13 +43,13 @@ description: Use when screening Taiwan sector/theme stocks and producing researc
 
 `%USERPROFILE%\tw-sector-screener-output\cache\market\market_data.sqlite`
 
-它以同一個 SQLite 分開保存 `daily_bars`、由日線派生的 `period_bars`（W/M/Q/Y）、季度與年度財務表、月營收、估值快照、TAIEX/index bars、security master、universe membership，以及 v3 的 `financial_fact_observations`、交易狀態、公司行動/adjusted bars、lifecycle、benchmark membership、market stats、法人/融資融券、market events、source links、raw payload、sync runs 與 quality issues。原有 `daily_bars.sqlite` 與 `quarterly_fundamentals.sqlite` 是保留的遷移來源，不是新的寫入目標；研究表已建立 schema/upsert 邊界，但空表或短歷史仍是未完成資料集。
+它以同一個 SQLite 分開保存 `daily_bars`、由日線派生的 `period_bars`（W/M/Q/Y）、季度與年度財務表、月營收、估值快照、TAIEX/index bars、security master、universe membership，以及 v4 的 `financial_fact_observations`、交易狀態、公司行動/adjusted bars、lifecycle、benchmark membership、market stats、法人/融資融券、market events、source links、raw payload、sync runs、partition checkpoints、gap ledger、completeness runs 與 quality issues。原有 `daily_bars.sqlite` 與 `quarterly_fundamentals.sqlite` 是保留的遷移來源，不是新的寫入目標；研究表已建立 schema/upsert 邊界，但空表或短歷史仍是未完成資料集。
 
 日線 provider 採 DB-first：已有至少 253 根 verified bars、最新交易日符合 `as_of` 且 `daily_bar_sync_state.last_current_day_verified_date` 已由來源驗證時只讀 SQLite；只在缺少歷史區間或當月/當日尾端時增量抓取。正常交易日若最新 verified bar 不等於 `as_of`，會 fail-closed，不以舊 cache 冒充當日收盤。所有來源保留 effective/published/fetched timestamps、來源 URL、payload hash、validation status 與 fallback/redirect 診斷，回測仍須遵守 point-in-time 限制。
 
 cache import 是歷史資料整理，不會自動取得當日驗證資格；`daily_bar_sync_state.last_current_day_verified_date` 只有在 provider 通過當日來源回應驗證後才會設定。之後同一 `as_of` 的 DB hit 才可免重查，並在 audit 中記為 current-day verified。缺少發布日的財務/事件資料可以留在 DB 或 quarantine，但不能進正式 PIT query。
 
-統一 DB 的 `market_data_sync_state` 會從既有 canonical rows 建立 `migrated` checkpoint，僅代表 SQLite 已有的資料範圍；只有增量同步重新驗證來源後才會更新為 `verified`。
+統一 DB 的 `market_data_sync_state` 會從既有 canonical rows 建立 `migrated` checkpoint，僅代表 SQLite 已有的資料範圍；歷史 enrichment 另使用 `market_data_partition_state` 保存月份／交易日 partition 的 request range、payload hash、row count 與狀態，只有增量同步重新驗證來源後才會更新為 `verified`。`--mode incremental` 可重用 exact verified checkpoint；`--mode full` 是受控 reconcile，會略過 checkpoint 並重新驗證來源。
 
 先同步 curated coverage 日線與 benchmark：
 
@@ -67,7 +67,41 @@ python scripts\sync_market_data.py `
   --database "$env:USERPROFILE\tw-sector-screener-output\cache\market\market_data.sqlite"
 ```
 
-`daily` 省略 `--from-date` 時會取得 `lookback` window；只有明確傳入 `--from-date` 才會以日期範圍讀取/補抓。歷史回補使用 `--profile enrichment --from-date YYYY-MM-DD --to-date YYYY-MM-DD`，不要塞進日報 watchdog。同步命令若選到尚未交付的 dataset，會輸出 `not_implemented` 並以非零 exit code 結束，不能被當成成功。
+`daily` 省略 `--from-date` 時會取得 `lookback` window；只有明確傳入 `--from-date` 才會以日期範圍讀取/補抓。歷史回補使用 `--profile enrichment --from-date YYYY-MM-DD --to-date YYYY-MM-DD`，不要塞進日報 watchdog。已交付並有 production adapter 的 enrichment dataset 包含 `monthly_revenue`、`valuation_snapshots`、`financial_facts`、`corporate_actions` 與 `market_sessions`；目前月營收最低批次是 12 個月，後三者為 bounded official snapshot，來源缺列會明確記錄為 `partial`／gap，不用零或舊值補上。尚未有 adapter 的資料集被選取時，會輸出 `not_implemented` 並以非零 exit code 結束，不能被當成成功。
+
+受控 enrichment 範例：
+
+```powershell
+Set-Location -LiteralPath 'C:\Users\a0953041880\.codex\skills\tw-sector-screener'
+python scripts\sync_market_data.py `
+  --profile enrichment `
+  --themes 'AI,半導體' `
+  --universe-mode coverage `
+  --as-of 2026-08-27 `
+  --from-date 2021-01-01 `
+  --to-date 2026-08-27 `
+  --datasets 'monthly_revenue,valuation_snapshots' `
+  --mode incremental `
+  --output-root "$env:USERPROFILE\tw-sector-screener-output" `
+  --database "$env:USERPROFILE\tw-sector-screener-output\cache\market\market_data.sqlite"
+```
+
+當期研究快照（不重新抓歷史月營收）可用：
+
+```powershell
+Set-Location -LiteralPath 'C:\Users\a0953041880\.codex\skills\tw-sector-screener'
+python scripts\sync_market_data.py `
+  --profile enrichment `
+  --themes 'AI,半導體' `
+  --universe-mode coverage `
+  --as-of 2026-08-27 `
+  --datasets 'financial_facts,corporate_actions,market_sessions,adjusted_bars' `
+  --mode incremental `
+  --output-root "$env:USERPROFILE\tw-sector-screener-output" `
+  --database "$env:USERPROFILE\tw-sector-screener-output\cache\market\market_data.sqlite"
+```
+
+`financial_facts` 的 `partial` 代表官方當期快照缺列，應查看 manifest 的 `coverage_gaps` 與 gap ledger；正式 PIT query 只選有可用／發布日期且 `validation_status=verified` 的 facts。`adjusted_bars` 在 adjustment factors 尚未完整以前只作可重建研究序列。
 
 cache import、遷移與 integrity 可重跑驗證；import 是來源整理，不等同於當日驗證，當日 gate 由 sync/provider 最後確認：
 

@@ -128,7 +128,7 @@ class MarketDataFoundationTests(unittest.TestCase):
                     conn.execute(
                         "SELECT value FROM schema_meta WHERE key='market_data_schema_version'"
                     ).fetchone()[0],
-                    "3",
+                    "4",
                 )
             finally:
                 conn.close()
@@ -198,6 +198,20 @@ class MarketDataFoundationTests(unittest.TestCase):
                 published_at="2026-07-01T08:00:00+08:00",
                 revision_id="r2",
                 source_payload_id="payload-r2",
+            )
+            upsert_financial_fact(
+                db_path,
+                market="TWSE",
+                symbol="2330",
+                fact_code="revenue",
+                fiscal_period="115Q1",
+                value=999.0,
+                unit="TWD",
+                consolidation="consolidated",
+                effective_date=date(2026, 3, 31),
+                available_date=date(2026, 6, 1),
+                revision_id="retrieved-only",
+                availability_precision="retrieval_date",
             )
 
             before_revision = query_financial_facts_as_of(
@@ -297,6 +311,40 @@ class MarketDataFoundationTests(unittest.TestCase):
                 information_cutoff=date(2026, 5, 31),
             )
             self.assertEqual(len(revenue_rows), 1)
+            upsert_monthly_revenue(
+                db_path,
+                market="TWSE",
+                symbol="2330",
+                revenue_month="11509",
+                monthly_revenue=120.0,
+                revenue_mom=None,
+                revenue_yoy=None,
+                source_endpoint="test.revenue",
+                source_url="https://example.test/revenue",
+                available_date=date(2026, 5, 1),
+            )
+            upsert_monthly_revenue(
+                db_path,
+                market="TWSE",
+                symbol="2330",
+                revenue_month="11506",
+                monthly_revenue=90.0,
+                revenue_mom=None,
+                revenue_yoy=None,
+                source_endpoint="test.revenue",
+                source_url="https://example.test/revenue",
+                available_date=date(2026, 5, 1),
+                availability_precision="retrieval_date",
+            )
+            bounded_revenue_rows = query_market_data_as_of(
+                db_path,
+                dataset="monthly_revenue",
+                market="TWSE",
+                symbol="2330",
+                observation_date=date(2026, 8, 31),
+                information_cutoff=date(2026, 5, 31),
+            )
+            self.assertEqual([row["revenue_month"] for row in bounded_revenue_rows], ["2026-07"])
             with self.assertRaises(ValueError):
                 query_market_data_as_of(
                     db_path,
@@ -349,6 +397,8 @@ class MarketDataFoundationTests(unittest.TestCase):
             )
             self.assertEqual(first["bars_upserted"], 3)
             self.assertEqual(second["bars_upserted"], 3)
+            self.assertEqual(first["derived_series_sha256"], second["derived_series_sha256"])
+            self.assertEqual(first["derivation_input_sha256"], second["derivation_input_sha256"])
             self.assertEqual(len(adjusted), 3)
             self.assertEqual(adjusted[0]["trade_date"], "2026-01-02")
             self.assertEqual(adjusted[0]["close"], 204.0)

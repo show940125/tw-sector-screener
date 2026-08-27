@@ -106,11 +106,11 @@
 
 ### H / Unified Market Data
 
-- canonical DB schema v3 已加入 dataset catalog、source registry、fetch attempts、sync items、incremental state、PIT facts、研究資料表與 quality issue occurrence
+- canonical DB schema v4 已加入 dataset catalog、source registry、fetch attempts、sync items、incremental state、partition checkpoints、gap ledger、completeness runs、PIT facts、研究資料表與 quality issue occurrence
 - `daily_bars` 採 DB-first；253 根歷史已齊且 current-day verified 時不逐月重抓，只補 missing range
 - 大型 raw payload 使用 hash/URI 隔離儲存；`scripts/verify_market_data.py` 提供只讀 integrity、foreign-key、coverage 與 benchmark gate
-- 交易狀態、adjusted bars、lifecycle、benchmark membership、market stats、法人/融資融券、事件等 v3 表與 upsert 契約已建立；歷史回補 adapter 仍分階段交付，空表不代表已完成
-- 年度財務、完整 PIT 季度修訂、60 個月月營收/估值與公司事件 adapter 尚未全部交付；sync 選到未實作資料集會 fail-closed，不會靜默略過
+- 交易狀態、adjusted bars、lifecycle、benchmark membership、market stats、法人/融資融券、事件等 v4 表與 upsert 契約已建立；歷史回補仍分階段交付，空表或短歷史不代表已完成
+- 月營收已完成 54 檔×12 月（648 rows）的 DB-first 回補；財報 facts、公司行動與交易日曆已接入 bounded official snapshot，來源缺列會進 gap ledger。估值 60 個月、年度財務與完整 PIT 季度修訂仍未完成；sync 選到未實作資料集會以 `not_implemented` fail-closed，不會靜默略過
 
 ### B / Validation V3
 
@@ -278,11 +278,11 @@ python "%USERPROFILE%\.codex\skills\tw-sector-screener\scripts\backfill_quarterl
 季度品質資料目前採「官方最新季抓取 + SQLite append-only 歷史累積」模式。  
 最新季通常拿得到；前一期與更早期的覆蓋會隨日常刷新逐步變厚。這是現階段的真實限制，文件就該老實寫。
 
-市場資料統一寫入 `%USERPROFILE%\tw-sector-screener-output\cache\market\market_data.sqlite`。`daily_bars` 保存官方 verified 日線；`period_bars` 保存由日線派生的週/月/季/年線；季度/年度財務、月營收、估值、TAIEX、security master、題材 membership、v3 PIT/research tables、raw payload 與 sync quality metadata 分表保存。provider 先讀 canonical DB，歷史 253 根已齊、current-day marker 已驗證時只補缺少的當月/當日；正常交易日最新日線不是 `as_of` 就 fail-closed。
+市場資料統一寫入 `%USERPROFILE%\tw-sector-screener-output\cache\market\market_data.sqlite`。`daily_bars` 保存官方 verified 日線；`period_bars` 保存由日線派生的週/月/季/年線；季度/年度財務、月營收、估值、TAIEX、security master、題材 membership、v4 PIT/research tables、raw payload 與 sync quality metadata 分表保存。provider 先讀 canonical DB，歷史 253 根已齊、current-day marker 已驗證時只補缺少的當月/當日；正常交易日最新日線不是 `as_of` 就 fail-closed。
 
 歷史 cache import 不會自行把當日列標為已驗證；只有 provider 通過當日來源回應後，DB-first 才會重用該 `as_of` 的當日列，避免用舊 cache 靜默補成今日資料。
 
-既有 canonical rows 會建立 `market_data_sync_state` 的 `migrated` checkpoint，但這不等同於當日來源驗證；只有增量同步成功後才標記為 `verified`。
+既有 canonical rows 會建立 `market_data_sync_state` 的 `migrated` checkpoint，但這不等同於當日來源驗證；只有增量同步成功後才標記為 `verified`。歷史 enrichment 另以 `market_data_partition_state` 保存月份/交易日的範圍與 payload hash；`--mode incremental` 命中完整 verified partition 時不發網路請求，`--mode full` 才會強制重新驗證。
 
 同步與遷移驗證：
 
@@ -312,7 +312,7 @@ python scripts\verify_market_data.py `
 
 canonical DB 會同時保留 `effective_date`、`published_at`、`fetched_at`、來源 URL、payload hash、validation status 與 fallback/redirect 診斷；回測不得把發布日晚於觀察日的資料前置使用。
 
-歷史月營收、估值、財報與事件回補使用 `--profile enrichment --from-date ... --to-date ...`，不放入 16:30 日報 watchdog；目前尚未通過 adapter/PIT/completeness gate 的資料集會明確失敗。資料層 schema、source-policy 與擴充順序見 [docs/market-data-database-development.md](docs/market-data-database-development.md)。
+歷史月營收、估值與財報／事件 enrichment 使用 `--profile enrichment --from-date ... --to-date ...`，不放入 16:30 日報 watchdog；月營收目前最低批次為 12 個月，財報／公司行動／交易日曆可用 bounded snapshot 命令，缺列會標示 `partial` 而不以零或舊值補值。資料層 schema、source-policy 與擴充順序見 [docs/market-data-database-development.md](docs/market-data-database-development.md)。
 
 ## How To Read The Report
 

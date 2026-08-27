@@ -32,9 +32,11 @@ from src.providers.market_data_store import (
     rebuild_period_bars,
     upsert_index_bars,
     upsert_monthly_revenue,
+    upsert_partition_state,
     upsert_security_master,
     upsert_valuation_snapshot,
 )
+from src.providers.market_data_adapters import FetchRequest, FetchResult
 from src.providers.quarterly_store import (
     claim_backfill_batch,
     create_backfill_run,
@@ -62,6 +64,9 @@ TWSE_STOCK_DAY_URL = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
 TWSE_BWIBBU_URL = "https://www.twse.com.tw/exchangeReport/BWIBBU_d"
 TWSE_FMTQIK_URL = "https://www.twse.com.tw/exchangeReport/FMTQIK"
 TWSE_EPS_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap14_L"
+TWSE_COMPANY_FINANCIAL_URL = "https://www.twse.com.tw/rwd/zh/IIH/company/financial"
+TWSE_CORPORATE_ACTIONS_URL = "https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL"
+TWSE_HOLIDAY_SCHEDULE_URL = "https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule"
 
 TPEX_BASICS_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TPEX_REVENUE_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O"
@@ -72,12 +77,25 @@ TPEX_TRADING_STOCK_URL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/trading
 TPEX_DAILY_QUOTES_URL = "https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_no1430/stk_wn1430_result.php"
 TPEX_PE_QRY_DATE_URL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/peQryDate"
 TPEX_EPS_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap14_O"
+TPEX_CORPORATE_ACTIONS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_exright_daily"
+TPEX_INSTITUTIONAL_URL = "https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading"
+TPEX_MARGIN_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_margin_balance"
+TPEX_MARKET_VALUE_URL = "https://www.tpex.org.tw/openapi/v1/tpex_daily_market_value"
+TPEX_TURNOVER_URL = "https://www.tpex.org.tw/openapi/v1/tpex_daily_turnover"
+# MOPS historical monthly-revenue responses are tabular HTML.  The endpoint
+# is kept separate from the current OpenAPI feed so a source-limit or layout
+# change can be recorded without silently treating the latest feed as history.
+MOPS_MONTHLY_REVENUE_URL = "https://mops.twse.com.tw/mops/web/ajax_t05st10_ifrs"
+# Current MOPS SPA JSON endpoint for one company/month.  The older HTML
+# endpoint remains only as a compatibility path for tests/legacy callers.
+MOPS_COMPANY_REVENUE_API_URL = "https://mops.twse.com.tw/mops/api/t05st10_ifrs"
 
 _REDIRECT_CODES = {301, 302, 303, 307, 308}
 _REDIRECT_ALLOWED_HOSTS = {
     "www.twse.com.tw",
     "openapi.twse.com.tw",
     "www.tpex.org.tw",
+    "mops.twse.com.tw",
 }
 
 
@@ -273,6 +291,7 @@ class TwMarketProvider:
         self._revenue_payload_hash: str | None = None
         self._last_source_payload_id: str | None = None
         self._last_persisted_payload_id: str | None = None
+        self._last_fetch_cache_status = "network"
         self._basics_payload_ids: dict[str, str | None] = {}
         self._revenue_payload_ids: dict[str, str | None] = {}
         # The TWSE/TPEx CDN can emit a self-308/428 when historical requests
@@ -359,7 +378,12 @@ class TwMarketProvider:
         source_url: str,
     ) -> None:
         body = req.data if isinstance(req.data, (bytes, bytearray)) else b""
-        effective = self._request_date(req) or date.today()
+        effective = self._request_date(req)
+        if effective is None:
+            request_month = self._request_month(req)
+            if request_month is not None:
+                effective = date(request_month[0], request_month[1], 1)
+        effective = effective or date.today()
         self._last_persisted_payload_id = None
         try:
             self._last_persisted_payload_id = record_source_payload(
@@ -472,8 +496,15 @@ class TwMarketProvider:
         if use_cache:
             cached = self._read_cache(cache_file, self._cache_ttl_seconds(req), req)
             if cached is not None:
+                self._last_fetch_cache_status = "fresh"
                 self._market_data_stats.cache_hit_count += 1
                 self._last_resolved_source_url = req.full_url
+                self._persist_loaded_payload(
+                    req,
+                    cached,
+                    endpoint_label=endpoint_label,
+                    source_url=req.full_url,
+                )
                 now = datetime.now().astimezone().isoformat()
                 self._record_fetch_attempt(
                     req,
@@ -487,6 +518,7 @@ class TwMarketProvider:
                     status="cache_hit",
                 )
                 return cached
+        self._last_fetch_cache_status = "network"
         endpoint = endpoint_label or self._endpoint_name(req.full_url)
         self._record_endpoint_attempt(endpoint)
         self._market_data_stats.request_count += 1
@@ -559,6 +591,7 @@ class TwMarketProvider:
                         payload_sha256=self._payload_sha256(payload),
                         status="network_success",
                     )
+                    self._last_fetch_cache_status = "network_insecure_tls_fallback"
                     return payload
                 if attempt < 2:
                     transient_http = isinstance(exc, HTTPError) and exc.code in {408, 425, 428, 429, 500, 502, 503, 504}
@@ -583,6 +616,148 @@ class TwMarketProvider:
             )
             raise last_exc
         raise RuntimeError("無法讀取 JSON")
+
+    def _read_text_request(self, req: Request, *, insecure: bool = False) -> tuple[str, str]:
+        """Read a bounded text response with the same explicit redirect policy."""
+
+        current = req
+        visited = {req.full_url}
+        redirect_chain: list[str] = []
+        self._last_redirect_chain = []
+        for _ in range(4):
+            try:
+                with self._open_request(current, insecure=insecure) as resp:
+                    body = resp.read()
+                    charset = resp.headers.get_content_charset() if resp.headers else None
+                    encoding = charset or "utf-8"
+                self._last_redirect_chain = list(redirect_chain)
+                return body.decode(encoding, errors="replace"), current.full_url
+            except HTTPError as exc:
+                if exc.code not in _REDIRECT_CODES:
+                    raise
+                try:
+                    location = exc.headers.get("Location") if exc.headers else None
+                    if not location:
+                        self._market_data_stats.redirect_failure_count += 1
+                        raise RuntimeError(f"HTTP {exc.code} 缺少 Location：{current.full_url}") from exc
+                    self._market_data_stats.redirect_count += 1
+                    if exc.code == 308:
+                        self._market_data_stats.redirect_308_count += 1
+                    next_request = self._redirect_request(current, location, exc.code, visited)
+                    visited.add(next_request.full_url)
+                    redirect_chain.append(next_request.full_url)
+                    current = next_request
+                finally:
+                    close_error = getattr(exc, "close", None)
+                    if close_error is not None:
+                        close_error()
+                    response_body = getattr(exc, "fp", None)
+                    close = getattr(response_body, "close", None)
+                    if close is not None:
+                        close()
+        self._market_data_stats.redirect_failure_count += 1
+        self._last_redirect_chain = list(redirect_chain)
+        raise RuntimeError(f"redirect 超過 3 層：{req.full_url}")
+
+    def _load_text(
+        self,
+        req: Request,
+        *,
+        endpoint_label: str | None = None,
+        use_cache: bool = True,
+        fallback_level: int = 0,
+    ) -> str:
+        """Load text/HTML while retaining the same cache and provenance rules."""
+
+        last_exc: Exception | None = None
+        cache_file = self._cache_path(req)
+        self._last_persisted_payload_id = None
+        if use_cache:
+            cached = self._read_cache(cache_file, self._cache_ttl_seconds(req), req)
+            if isinstance(cached, str):
+                self._last_fetch_cache_status = "fresh"
+                self._market_data_stats.cache_hit_count += 1
+                self._last_resolved_source_url = req.full_url
+                self._persist_loaded_payload(
+                    req,
+                    cached,
+                    endpoint_label=endpoint_label,
+                    source_url=req.full_url,
+                )
+                now = datetime.now().astimezone().isoformat()
+                self._record_fetch_attempt(
+                    req,
+                    dataset_key=endpoint_label or self._endpoint_name(req.full_url),
+                    started_at=now,
+                    finished_at=now,
+                    final_url=req.full_url,
+                    cache_status="fresh",
+                    fallback_level=fallback_level,
+                    payload_sha256=self._payload_sha256(cached),
+                    status="cache_hit",
+                )
+                return cached
+        self._last_fetch_cache_status = "network"
+        endpoint = endpoint_label or self._endpoint_name(req.full_url)
+        self._record_endpoint_attempt(endpoint)
+        self._market_data_stats.request_count += 1
+        request_started_at = datetime.now().astimezone().isoformat()
+        redirects_seen_for_request = 0
+        for attempt in range(3):
+            redirect_308_before = self._market_data_stats.redirect_308_count
+            try:
+                payload, resolved_source_url = self._read_text_request(req)
+                self._last_resolved_source_url = resolved_source_url
+                redirects_seen_for_request += self._market_data_stats.redirect_308_count - redirect_308_before
+                self._write_cache(cache_file, payload)
+                self._persist_loaded_payload(
+                    req,
+                    payload,
+                    endpoint_label=endpoint_label,
+                    source_url=resolved_source_url,
+                )
+                self._market_data_stats.network_success_count += 1
+                self._record_endpoint_success(endpoint)
+                self._market_data_stats.redirect_308_recovered_count += redirects_seen_for_request
+                self._record_fetch_attempt(
+                    req,
+                    dataset_key=endpoint_label or endpoint,
+                    started_at=request_started_at,
+                    finished_at=datetime.now().astimezone().isoformat(),
+                    final_url=resolved_source_url,
+                    http_status=200,
+                    cache_status="network",
+                    fallback_level=fallback_level,
+                    payload_sha256=self._payload_sha256(payload),
+                    status="network_success",
+                )
+                return payload
+            except Exception as exc:
+                redirects_seen_for_request += self._market_data_stats.redirect_308_count - redirect_308_before
+                last_exc = exc
+                if isinstance(exc, HTTPError):
+                    code = str(exc.code)
+                    self._market_data_stats.http_error_counts[code] = (
+                        self._market_data_stats.http_error_counts.get(code, 0) + 1
+                    )
+                if attempt < 2:
+                    time.sleep(0.6 * (attempt + 1))
+                    self._market_data_stats.retry_count += 1
+        if last_exc is not None:
+            self._record_fetch_attempt(
+                req,
+                dataset_key=endpoint_label or endpoint,
+                started_at=request_started_at,
+                finished_at=datetime.now().astimezone().isoformat(),
+                final_url=self._last_resolved_source_url,
+                http_status=getattr(last_exc, "code", None),
+                cache_status="network",
+                fallback_level=fallback_level,
+                status="failed",
+                error=str(last_exc),
+            )
+            raise last_exc
+        raise RuntimeError("無法讀取文字回應")
 
     def _load_json_candidates(
         self,
@@ -636,6 +811,8 @@ class TwMarketProvider:
         url = req.full_url.lower()
         if self._is_incremental_monthly_endpoint(req):
             return 20 * 60
+        if "t05st10_ifrs" in url or "iih/company/financial" in url:
+            return 365 * 24 * 3600
         if any(marker in url for marker in ["date=", "stockno=", "code="]):
             return 365 * 24 * 3600
         return 12 * 3600
@@ -706,6 +883,13 @@ class TwMarketProvider:
             query = parse_qs(req.data.decode("utf-8", errors="ignore"))
         raw = (query.get("date") or [""])[0]
         digits = re.sub(r"[^0-9]", "", raw)
+        if not digits and query.get("year") and query.get("month"):
+            year_digits = re.sub(r"[^0-9]", "", str(query["year"][0]))
+            month_digits = re.sub(r"[^0-9]", "", str(query["month"][0]))
+            if len(year_digits) == 3 and month_digits:
+                return int(year_digits) + 1911, int(month_digits)
+            if len(year_digits) >= 4 and month_digits:
+                return int(year_digits[:4]), int(month_digits)
         if len(digits) == 7:
             return int(digits[:3]) + 1911, int(digits[3:5])
         if len(digits) < 6:
@@ -779,6 +963,21 @@ class TwMarketProvider:
                 "User-Agent": "Mozilla/5.0",
                 "Accept": "*/*",
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache",
+                "Connection": "close",
+            },
+        )
+
+    @staticmethod
+    def _build_json_post_request(url: str, data: dict[str, Any]) -> Request:
+        return Request(
+            url,
+            data=json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "Accept": "application/json, */*",
+                "Content-Type": "application/json; charset=UTF-8",
                 "Cache-Control": "no-cache",
                 "Pragma": "no-cache",
                 "Connection": "close",
@@ -901,8 +1100,14 @@ class TwMarketProvider:
         provenance: dict[date, dict[str, Any]] = {}
         cursor = date(as_of.year, as_of.month, 1)
         months_checked = 0
+        # FMTQIK is a monthly endpoint containing daily index observations.
+        # The former fixed 36-month ceiling silently made a 1,260-session
+        # request impossible.  Derive a bounded request budget from the
+        # requested lookback while retaining headroom for holidays and source
+        # gaps; a true source boundary still fails closed below.
+        max_months = max(36, (max(lookback, 1) // 15) + 12)
 
-        while months_checked < 36 and len(collected) < (lookback + 10):
+        while months_checked < max_months and len(collected) < (lookback + 10):
             fmt_request = self._build_get_request(
                 TWSE_FMTQIK_URL,
                 {"response": "json", "date": cursor.strftime("%Y%m%d")},
@@ -961,6 +1166,8 @@ class TwMarketProvider:
                     "source_payload_sha256": provenance.get(item["date"], {}).get("source_payload_sha256", ""),
                     "source_payload_id": provenance.get(item["date"], {}).get("source_payload_id"),
                     "fetched_at": datetime.now().astimezone().isoformat(),
+                    "available_date": item["date"].isoformat(),
+                    "availability_precision": "source_observation_date",
                     "data_status": "verified",
                 }
                 for item in series
@@ -1964,6 +2171,346 @@ class TwMarketProvider:
         return mapped
 
     @staticmethod
+    def _adapter_fetch_request(
+        request: Request,
+        *,
+        dataset_key: str,
+        market: str | None,
+        symbol: str | None = None,
+        requested_from: date | None,
+        requested_to: date | None,
+    ) -> FetchRequest:
+        body = request.data if isinstance(request.data, (bytes, bytearray)) else None
+        return FetchRequest(
+            dataset_key=dataset_key,
+            market=market,
+            symbol=symbol,
+            requested_from=requested_from,
+            requested_to=requested_to,
+            method=request.get_method(),
+            url=request.full_url,
+            body=bytes(body) if body is not None else None,
+        )
+
+    def fetch_monthly_revenue_partition_for_symbol(
+        self,
+        *,
+        market: str,
+        symbol: str,
+        revenue_month: str,
+        as_of: date,
+        force_network: bool = False,
+    ) -> FetchResult:
+        """Fetch one official historical monthly-revenue observation.
+
+        TWSE's IIH endpoint returns a bounded 13-month chart, while the MOPS
+        SPA endpoint returns exactly one requested TPEx company/month. Both
+        paths retain company identity in ``FetchRequest`` so parsing can fail
+        closed on a wrong-company response.
+        """
+
+        digits = re.sub(r"[^0-9]", "", str(revenue_month))
+        if len(digits) == 5:
+            year, month = int(digits[:3]) + 1911, int(digits[3:])
+        elif len(digits) >= 6:
+            year, month = int(digits[:4]), int(digits[4:6])
+        else:
+            raise ValueError(f"invalid revenue month: {revenue_month}")
+        month_start = date(year, month, 1)
+        month_end = _shift_month(month_start, 1) - timedelta(days=1)
+        symbol = str(symbol).strip()
+        if not _is_stock_symbol(symbol):
+            raise ValueError(f"invalid stock symbol: {symbol}")
+        if market == "TWSE":
+            request = self._build_get_request(
+                TWSE_COMPANY_FINANCIAL_URL,
+                {"code": symbol},
+            )
+            payload = self._load_json(
+                request,
+                endpoint_label="twse.IIH.company.financial",
+                use_cache=not force_network,
+            )
+            if not (
+                isinstance(payload, dict)
+                and isinstance(payload.get("info"), dict)
+                and str(payload["info"].get("status") or "").lower() == "success"
+            ):
+                raise MarketDataFetchError(
+                    f"TWSE company financial response unavailable for {symbol}"
+                )
+            adapter_request = self._adapter_fetch_request(
+                request,
+                dataset_key="monthly_revenue",
+                market=market,
+                symbol=symbol,
+                requested_from=month_start,
+                requested_to=month_end,
+            )
+        elif market == "TPEx":
+            request = self._build_json_post_request(
+                MOPS_COMPANY_REVENUE_API_URL,
+                {
+                    "companyId": symbol,
+                    "dataType": "2",
+                    "month": f"{month:02d}",
+                    "year": f"{year - 1911:03d}",
+                    "subsidiaryCompanyId": "",
+                },
+            )
+            payload = self._load_json(
+                request,
+                endpoint_label="mops.t05st10_ifrs",
+                use_cache=not force_network,
+            )
+            if not (
+                isinstance(payload, dict)
+                and str(payload.get("code") or "") in {"200", "200.0"}
+                and isinstance(payload.get("result"), dict)
+            ):
+                raise MarketDataFetchError(
+                    f"MOPS company revenue response unavailable for {symbol}/{month_start:%Y-%m}"
+                )
+            adapter_request = self._adapter_fetch_request(
+                request,
+                dataset_key="monthly_revenue",
+                market=market,
+                symbol=symbol,
+                requested_from=month_start,
+                requested_to=month_end,
+            )
+        else:
+            raise ValueError(f"unsupported market for monthly revenue: {market}")
+        return FetchResult(
+            status="fetched",
+            payload=payload,
+            request=adapter_request,
+            final_url=self._last_resolved_source_url or request.full_url,
+            redirect_chain=tuple(self._last_redirect_chain),
+            http_status=200,
+            fallback_level=0,
+            cache_status=self._last_fetch_cache_status,
+            payload_sha256=self._payload_sha256(payload),
+        )
+
+    def fetch_monthly_revenue_history_for_symbol(
+        self,
+        *,
+        market: str,
+        symbol: str,
+        requested_from: date,
+        requested_to: date,
+        as_of: date,
+        force_network: bool = False,
+    ) -> FetchResult:
+        """Fetch a symbol's bounded history using its official chart/API."""
+
+        if requested_from > requested_to:
+            raise ValueError("monthly revenue range must be ascending")
+        if market == "TWSE":
+            # The TWSE chart is a bounded multi-month payload. The sync layer
+            # filters it to the requested range and records missing periods.
+            return self.fetch_monthly_revenue_partition_for_symbol(
+                market=market,
+                symbol=symbol,
+                revenue_month=requested_to.strftime("%Y-%m"),
+                as_of=as_of,
+                force_network=force_network,
+            )
+        raise ValueError(
+            "TPEx historical monthly revenue uses the per-symbol/month method"
+        )
+
+    def fetch_research_dataset(
+        self,
+        *,
+        dataset_key: str,
+        market: str,
+        as_of: date,
+        force_network: bool = False,
+    ) -> FetchResult:
+        """Fetch one bounded official snapshot used by research enrichment."""
+
+        endpoint_map: dict[tuple[str, str], tuple[str, str]] = {
+            ("financial_facts", "TWSE"): (TWSE_EPS_URL, "twse.t187ap14_L"),
+            ("financial_facts", "TPEx"): (TPEX_EPS_URL, "tpex.mopsfin_t187ap14_O"),
+            ("corporate_actions", "TWSE"): (TWSE_CORPORATE_ACTIONS_URL, "twse.TWT48U_ALL"),
+            ("corporate_actions", "TPEx"): (TPEX_CORPORATE_ACTIONS_URL, "tpex.exright_daily"),
+            ("market_sessions", "TWSE"): (TWSE_HOLIDAY_SCHEDULE_URL, "twse.holidaySchedule"),
+            # The official annual market holiday schedule is the common
+            # securities-market calendar; retain the source label so the
+            # shared-calendar assumption remains visible in provenance.
+            ("market_sessions", "TPEx"): (TWSE_HOLIDAY_SCHEDULE_URL, "twse.holidaySchedule.shared_market"),
+            ("institutional_flows", "TPEx"): (TPEX_INSTITUTIONAL_URL, "tpex.3insti_daily_trading"),
+            ("margin_short_snapshots", "TPEx"): (TPEX_MARGIN_URL, "tpex.mainboard_margin_balance"),
+            ("daily_market_stats", "TPEx"): (TPEX_MARKET_VALUE_URL, "tpex.daily_market_value"),
+        }
+        try:
+            url, endpoint_label = endpoint_map[(dataset_key, market)]
+        except KeyError as exc:
+            raise ValueError(f"no research source for {dataset_key}/{market}") from exc
+        request = self._build_get_request(url)
+        payload = self._load_json(
+            request,
+            endpoint_label=endpoint_label,
+            use_cache=not force_network,
+        )
+        if not isinstance(payload, (list, dict)):
+            raise MarketDataFetchError(
+                f"{endpoint_label} returned an unsupported JSON shape"
+            )
+        adapter_request = self._adapter_fetch_request(
+            request,
+            dataset_key=dataset_key,
+            market=market,
+            requested_from=as_of,
+            requested_to=as_of,
+        )
+        return FetchResult(
+            status="fetched",
+            payload=payload,
+            request=adapter_request,
+            final_url=self._last_resolved_source_url or request.full_url,
+            redirect_chain=tuple(self._last_redirect_chain),
+            http_status=200,
+            cache_status=self._last_fetch_cache_status,
+            payload_sha256=self._payload_sha256(payload),
+        )
+
+    def fetch_monthly_revenue_partition(
+        self,
+        *,
+        market: str,
+        revenue_month: str,
+        as_of: date,
+        force_network: bool = False,
+    ) -> FetchResult:
+        """Fetch one official MOPS monthly-revenue partition.
+
+        Historical MOPS responses are commonly HTML, so this method keeps the
+        raw text and lets ``HistoricalMonthlyRevenueAdapter`` perform the
+        schema validation.  It intentionally does not substitute the latest
+        OpenAPI feed for an older requested month.
+        """
+
+        digits = re.sub(r"[^0-9]", "", str(revenue_month))
+        if len(digits) == 5:
+            year, month = int(digits[:3]) + 1911, int(digits[3:])
+        elif len(digits) >= 6:
+            year, month = int(digits[:4]), int(digits[4:6])
+        else:
+            raise ValueError(f"invalid revenue month: {revenue_month}")
+        month_start = date(year, month, 1)
+        next_month = _shift_month(month_start, 1)
+        month_end = next_month - timedelta(days=1)
+        params = {
+            "step": "1",
+            "firstin": "1",
+            "off": "1",
+            "queryName": "co_id",
+            "inpuType": "co_id",
+            "TYPEK": "sii" if market == "TWSE" else "otc",
+            "isnew": "true",
+            "year": f"{year - 1911:03d}",
+            "month": f"{month:02d}",
+        }
+        request = self._build_post_request(MOPS_MONTHLY_REVENUE_URL, params)
+        payload = self._load_text(
+            request,
+            endpoint_label="mops.monthly_revenue",
+            use_cache=not force_network,
+        )
+        adapter_request = self._adapter_fetch_request(
+            request,
+            dataset_key="monthly_revenue",
+            market=market,
+            requested_from=month_start,
+            requested_to=month_end,
+        )
+        return FetchResult(
+            status="fetched",
+            payload=payload,
+            request=adapter_request,
+            final_url=self._last_resolved_source_url or request.full_url,
+            redirect_chain=tuple(self._last_redirect_chain),
+            http_status=200,
+            fallback_level=0,
+            cache_status=self._last_fetch_cache_status,
+            payload_sha256=self._payload_sha256(payload),
+        )
+
+    def fetch_valuation_partition(
+        self,
+        *,
+        market: str,
+        requested_from: date,
+        requested_to: date,
+        force_network: bool = False,
+    ) -> FetchResult:
+        """Fetch the last available official valuation table in a date range."""
+
+        if requested_from > requested_to:
+            raise ValueError("valuation range must be ascending")
+        current = requested_to
+        last_error: Exception | None = None
+        for _ in range((requested_to - requested_from).days + 1):
+            if current < requested_from:
+                break
+            try:
+                if market == "TPEx":
+                    request = self._build_post_request(
+                        TPEX_PE_QRY_DATE_URL,
+                        {"date": current.strftime("%Y/%m/%d"), "response": "json"},
+                    )
+                    payload = self._load_json(
+                        request,
+                        endpoint_label="tpex.peQryDate",
+                        use_cache=not force_network,
+                    )
+                    valid = isinstance(payload, dict) and str(payload.get("stat") or "").lower() == "ok"
+                else:
+                    request = self._build_get_request(
+                        TWSE_BWIBBU_URL,
+                        {"response": "json", "date": current.strftime("%Y%m%d"), "selectType": "ALL"},
+                    )
+                    payload = self._load_json(
+                        request,
+                        endpoint_label="twse.BWIBBU_d",
+                        use_cache=not force_network,
+                    )
+                    valid = self._valid_twse_stock_day_payload(payload) or (
+                        isinstance(payload, dict) and payload.get("stat") == "OK"
+                    )
+                if valid:
+                    adapter_request = self._adapter_fetch_request(
+                        request,
+                        dataset_key="valuation_snapshots",
+                        market=market,
+                        requested_from=requested_from,
+                        requested_to=current,
+                    )
+                    return FetchResult(
+                        status="fetched",
+                        payload=payload,
+                        request=adapter_request,
+                        final_url=self._last_resolved_source_url or request.full_url,
+                        redirect_chain=tuple(self._last_redirect_chain),
+                        http_status=200,
+                        cache_status=self._last_fetch_cache_status,
+                        payload_sha256=self._payload_sha256(payload),
+                    )
+            except Exception as exc:
+                last_error = exc
+            current -= timedelta(days=1)
+        if last_error is not None:
+            raise MarketDataFetchError(
+                f"{market} valuation range unavailable: {requested_from}..{requested_to}: {last_error}"
+            ) from last_error
+        raise MarketDataFetchError(
+            f"{market} valuation range has no official snapshot: {requested_from}..{requested_to}"
+        )
+
+    @staticmethod
     def _valid_twse_stock_day_payload(payload: Any) -> bool:
         return isinstance(payload, dict) and payload.get("stat") == "OK" and isinstance(payload.get("data"), list)
 
@@ -2120,9 +2667,21 @@ class TwMarketProvider:
 
     @staticmethod
     def _payload_sha256(payload: Any) -> str:
-        return hashlib.sha256(
-            json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
-        ).hexdigest()
+        if isinstance(payload, (bytes, bytearray)):
+            raw = bytes(payload)
+        elif isinstance(payload, str):
+            # ``record_source_payload`` preserves text byte-for-byte, even
+            # when the text happens to contain JSON.
+            raw = payload.encode("utf-8")
+        else:
+            raw = json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            ).encode("utf-8")
+        return hashlib.sha256(raw).hexdigest()
 
     def _verified_bar_from_candle(
         self,
@@ -2153,7 +2712,60 @@ class TwMarketProvider:
             source_fetched_at=datetime.now().astimezone().isoformat(),
             source_priority=source_priority,
             source_payload_id=source_payload_id,
+            availability_precision="source_observation_date",
         )
+
+    def _record_daily_partition_checkpoint(
+        self,
+        *,
+        market: str,
+        symbol: str,
+        month_start: date,
+        as_of: date,
+        bars: list[VerifiedDailyBar],
+    ) -> None:
+        """Persist the month-level evidence produced by a fetch.
+
+        This is supplementary to ``daily_bar_sync_state``.  It records the
+        actual source URL/hash range that populated a month, allowing later
+        reconciliation to distinguish a migrated cache from a network-
+        verified partition.
+        """
+
+        if not bars:
+            return
+        hashes = sorted({str(bar.source_payload_sha256) for bar in bars if bar.source_payload_sha256})
+        payload_hash = self._payload_sha256(hashes)
+        source_url = str(bars[-1].source_url)
+        source_payload_id = next(
+            (bar.source_payload_id for bar in reversed(bars) if bar.source_payload_id),
+            None,
+        )
+        month_end = _shift_month(month_start, 1) - timedelta(days=1)
+        try:
+            upsert_partition_state(
+                self.market_data_db_path,
+                dataset_key="daily_bars",
+                market=market,
+                symbol=symbol,
+                partition_key=month_start.strftime("%Y-%m"),
+                request_method="provider",
+                request_url=source_url,
+                requested_from=month_start,
+                requested_to=min(month_end, as_of),
+                payload_sha256=payload_hash,
+                source_payload_id=source_payload_id,
+                first_effective_date=min(bar.trade_date for bar in bars),
+                last_effective_date=max(bar.trade_date for bar in bars),
+                row_count=len(bars),
+                status="verified",
+                last_verified_at=datetime.now().astimezone().isoformat(),
+                last_run_id=self.sync_run_id,
+            )
+        except Exception:
+            # Checkpoint persistence is audit metadata; the existing daily bar
+            # import/current-day gate remains the correctness boundary.
+            return
 
     def _record_market_payload(
         self,
@@ -2435,6 +3047,13 @@ class TwMarketProvider:
             except Exception as exc:
                 errors.append(f"{month_start:%Y-%m}: {exc}")
                 continue
+            self._record_daily_partition_checkpoint(
+                market=market,
+                symbol=symbol,
+                month_start=month_start,
+                as_of=as_of,
+                bars=month_bars,
+            )
             for bar in month_bars:
                 if _is_weekday(as_of) and bar.trade_date == as_of:
                     network_current_day_seen = True

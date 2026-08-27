@@ -31,7 +31,10 @@ class VerifiedDailyBar:
     source_priority: int = 100
     source_payload_id: str | None = None
     effective_date: date | None = None
+    available_date: date | None = None
     published_at: str | None = None
+    availability_precision: str = "unknown"
+    data_gap_reason: str | None = None
 
 
 @dataclass
@@ -118,7 +121,10 @@ def init_db(db_path: Path) -> None:
                 imported_at TEXT NOT NULL,
                 data_status TEXT NOT NULL DEFAULT 'verified',
                 effective_date TEXT,
+                available_date TEXT,
                 published_at TEXT,
+                availability_precision TEXT NOT NULL DEFAULT 'unknown',
+                data_gap_reason TEXT,
                 PRIMARY KEY (market, symbol, trade_date)
             );
 
@@ -136,7 +142,10 @@ def init_db(db_path: Path) -> None:
                 validation_error TEXT,
                 imported_at TEXT NOT NULL,
                 effective_date TEXT,
+                available_date TEXT,
                 published_at TEXT,
+                availability_precision TEXT NOT NULL DEFAULT 'unknown',
+                data_gap_reason TEXT,
                 PRIMARY KEY (
                     market, symbol, trade_date, source_url, source_payload_sha256
                 )
@@ -207,10 +216,19 @@ def init_db(db_path: Path) -> None:
             columns = {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
             if "effective_date" not in columns:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN effective_date TEXT")
+            if "available_date" not in columns:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN available_date TEXT")
             if "published_at" not in columns:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN published_at TEXT")
             if "source_payload_id" not in columns:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN source_payload_id TEXT")
+            if "availability_precision" not in columns:
+                conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN availability_precision "
+                    "TEXT NOT NULL DEFAULT 'unknown'"
+                )
+            if "data_gap_reason" not in columns:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN data_gap_reason TEXT")
         sync_state_columns = {
             str(row[1]) for row in conn.execute("PRAGMA table_info(daily_bar_sync_state)").fetchall()
         }
@@ -280,7 +298,14 @@ def _bar_params(bar: VerifiedDailyBar, imported_at: str) -> dict[str, Any]:
         "source_priority": bar.source_priority,
         "imported_at": imported_at,
         "effective_date": (bar.effective_date or bar.trade_date).isoformat(),
+        "available_date": (
+            (bar.available_date or bar.trade_date).isoformat()
+            if (bar.available_date is not None or bar.availability_precision == "source_observation_date")
+            else None
+        ),
         "published_at": bar.published_at,
+        "availability_precision": bar.availability_precision or "unknown",
+        "data_gap_reason": bar.data_gap_reason,
     }
 
 
@@ -300,12 +325,14 @@ def _record_source(conn: sqlite3.Connection, bar: VerifiedDailyBar, imported_at:
             market, symbol, trade_date, source_endpoint, source_url,
             source_cache_file, source_payload_sha256, source_fetched_at,
             source_payload_id, source_priority, validation_status, validation_error,
-            imported_at, effective_date, published_at
+            imported_at, effective_date, available_date, published_at, availability_precision,
+            data_gap_reason
         ) VALUES(
             :market, :symbol, :trade_date, :source_endpoint, :source_url,
             :source_cache_file, :source_payload_sha256, :source_fetched_at,
             :source_payload_id, :source_priority, 'verified', NULL, :imported_at,
-            :effective_date, :published_at
+            :effective_date, :available_date, :published_at, :availability_precision,
+            :data_gap_reason
         )
         ON CONFLICT(
             market, symbol, trade_date, source_url, source_payload_sha256
@@ -319,7 +346,10 @@ def _record_source(conn: sqlite3.Connection, bar: VerifiedDailyBar, imported_at:
             validation_error=excluded.validation_error,
             imported_at=excluded.imported_at,
             effective_date=excluded.effective_date,
-            published_at=excluded.published_at
+            available_date=excluded.available_date,
+            published_at=excluded.published_at,
+            availability_precision=excluded.availability_precision,
+            data_gap_reason=excluded.data_gap_reason
         """,
         params,
     )
@@ -372,7 +402,10 @@ def _upsert_bar(
                 source_payload_id=:source_payload_id,
                 source_priority=:source_priority, imported_at=:imported_at,
                 data_status='verified', effective_date=:effective_date,
-                published_at=:published_at
+                available_date=:available_date,
+                published_at=:published_at,
+                availability_precision=:availability_precision,
+                data_gap_reason=:data_gap_reason
             WHERE market=:market AND symbol=:symbol AND trade_date=:trade_date
             """,
             params,
@@ -384,13 +417,15 @@ def _upsert_bar(
             market, symbol, trade_date, open, high, low, close, volume,
             source_endpoint, source_url, source_cache_file,
             source_payload_sha256, source_fetched_at, source_priority,
-            source_payload_id, imported_at, data_status, effective_date, published_at
+            source_payload_id, imported_at, data_status, effective_date, available_date, published_at,
+            availability_precision, data_gap_reason
         ) VALUES(
             :market, :symbol, :trade_date, :open, :high, :low, :close, :volume,
             :source_endpoint, :source_url, :source_cache_file,
             :source_payload_sha256, :source_fetched_at, :source_priority,
             :source_payload_id,
-            :imported_at, 'verified', :effective_date, :published_at
+            :imported_at, 'verified', :effective_date, :available_date, :published_at,
+            :availability_precision, :data_gap_reason
         )
         """,
         params,
@@ -540,7 +575,8 @@ def get_bars(
             "SELECT market, symbol, trade_date, open, high, low, close, volume, "
             "source_endpoint, source_url, source_cache_file, source_payload_sha256, "
             "source_payload_id, source_fetched_at, source_priority, imported_at, "
-            "effective_date, published_at "
+            "effective_date, available_date, published_at, availability_precision, "
+            "data_gap_reason "
         "FROM daily_bars WHERE "
         + " AND ".join(conditions)
         + " ORDER BY trade_date DESC"

@@ -1,6 +1,6 @@
 # 市場資料補齊 Roadmap
 
-本文件是資料庫擴充的設計與交付順序，不代表本輪已完成所有資料回補。任何未通過來源、PIT、重複列、日期或 coverage gate 的資料集，都只能標記為 `partial`／`planned`，不得悄悄進入排名。
+本文件是資料庫擴充的設計與交付順序，不代表本輪已完成所有資料回補。任何未通過來源、PIT、重複列、日期或 coverage gate 的資料集，都只能標記為 `partial`／`not_implemented`，不得悄悄進入排名。
 
 ## 1. 現況基線（2026-08-27）
 
@@ -13,13 +13,18 @@
 | `index_bars` | 283 rows | production | TAIEX current-day verified |
 | `security_master_snapshots` | 54 rows | snapshot | 目前 coverage identity／industry 可用，歷史異動仍待補 |
 | `quarterly_company_fundamentals` | 4,708 rows | partial | 有既有季度資料，但 PIT 發布日與 revision lineage 待增強 |
-| `monthly_revenue` | 54 rows | snapshot | 目前各候選一筆；60 月歷史 adapter 待做 |
-| `valuation_snapshots` | 54 rows | snapshot | 目前各候選一筆；歷史 PE/PB/殖利率 adapter 待做 |
-| `annual_company_fundamentals` | 0 rows | planned | 尚未建立年度 facts 回補流程 |
-| `corporate_actions` | 0 rows | planned | 尚未建立股利、分割、除權息事件回補流程 |
+| `monthly_revenue` | 648 rows | partial | 54 檔×12 月（2025-08～2026-07）已完成；60 月仍待 enrichment 回補 |
+| `valuation_snapshots` | 54 rows | snapshot | 已有歷史 adapter；目前資料仍是短歷史，60 月回補尚未執行 |
+| `financial_fact_observations` | 212 rows | partial | 已寫入目前官方季度 bulk snapshot；53/54 coverage 有有效 facts，6415 缺列已進 gap ledger；20 季／8 年仍待回補 |
+| `annual_company_fundamentals` | 0 rows | not_implemented | 年度 facts 回補流程尚未交付，不能用季度值冒充年度值 |
+| `corporate_actions` | current snapshot | partial | 已接入 TWSE／TPEx 官方當期事件快照；完整歷史仍待回補 |
+| `market_sessions` | current snapshot | partial | 已接入 TWSE 官方年度假日／交易日快照並映射 TPEx；不是完整歷史交易日表 |
 | `market_data_sync_state` | 601 rows | control | 已由 canonical rows 建立 `migrated` checkpoint；不等同於 current-day verified |
+| `market_data_partition_state` | v4 control | control | 以 dataset/market/partition 保存 request range、payload hash、row count 與驗證狀態 |
+| `market_data_gap_ledger` | v4 control | control | 以固定 partition 聚合可重試、可解釋的資料缺口 |
+| `market_data_completeness_runs` | v4 control | control | 保存每次 expected/actual rows、partitions 與 missing partitions |
 
-schema v3 另已建立但尚待歷史回補的研究表：`financial_fact_observations`、`market_sessions`、`security_trading_status`、`adjustment_factors`、`adjusted_bars`、`security_lifecycle`、`benchmark_membership`、`daily_market_stats`、`institutional_flows`、`margin_short_snapshots`、`market_events` 與 `market_data_source_links`。表存在、typed upsert 可用，不等於各資料集已達 coverage gate。
+schema v4 另已建立、部分已有 bounded snapshot 的研究表：`financial_fact_observations`、`market_sessions`、`corporate_actions`、`adjusted_bars` 與 `market_data_source_links`；`security_trading_status`、`adjustment_factors`、`security_lifecycle`、`benchmark_membership`、`daily_market_stats`、`institutional_flows`、`margin_short_snapshots`、`market_events` 仍待 adapter。表存在或有一批 snapshot，都不等於各資料集已達歷史 coverage gate。
 
 ## 2. 共同資料契約
 
@@ -35,35 +40,41 @@ schema v3 另已建立但尚待歷史回補的研究表：`financial_fact_observ
 
 ## 3. 分階段補齊
 
-### Phase 0：資料層正確性、契約與可觀測性（schema v3 foundation 已完成）
+### Phase 0：資料層正確性、契約與可觀測性（schema v4 foundation 已完成）
 
-- schema v3、dataset catalog、source registry、fetch attempts、source payload links、PIT facts 與 quality issue dedupe。
+- schema v4、dataset catalog、source registry、fetch attempts、source payload links、PIT facts、partition checkpoint、gap ledger、completeness run 與 quality issue dedupe。
 - legacy daily／quarterly migration 與 W/M/Q/Y period derivation。
 - DB-first provider、同源 HTTPS safe 308 redirect、TWSE/TPEx fallback、current-day fail-closed、read-only verifier。
-- daily/enrichment sync profile、真正的 from/to range、dry-run no network/no DB mutation、未實作 dataset non-zero failure。
+- daily/enrichment sync profile、真正的 from/to range、dry-run no network/no DB mutation、月營收／估值／財務 facts／公司行動／交易日曆 validated adapters、未實作 dataset non-zero failure。
 - 受影響 symbol 的 period/adjusted rebuild、legacy migration fingerprint 與 current-day verification marker。
 
-本階段交付的是「不再靜默略過或重抓已知資料」的資料層能力，不代表下列所有資料已完成歷史回補。任何空表、短歷史或缺少發布日的 dataset 仍標為 partial/planned。
+本階段交付的是「不再靜默略過或重抓已知資料」的資料層能力，加上月營收最低 12 個月與三類 bounded research snapshot；不代表下列所有資料已完成歷史回補。任何空表、短歷史、來源缺列或缺少發布日的 dataset 仍標為 partial/not_implemented。
 
-### Phase 1：月營收與估值歷史
+### Phase 1：歷史日線、交易日與可交易狀態
 
-目標是把目前每檔一筆 snapshot 擴成可重建的歷史序列，至少補 60 個月；若上市未滿 60 個月則保存上市以來並列明缺口。
+將 54 檔及 TAIEX 補至 1,260 根交易日，或上市以來／官方來源起始日，並記錄逐檔邊界；補 `market_sessions`、停牌、處置、上市／下市、改名與不可交易狀態。日線 raw OHLCV 不覆寫，缺資料不推論成正常交易。
+
+完成門檻：54 檔與 benchmark 的來源範圍、current-day gate、session/status 缺口均可稽核；同一 verified partition 重跑不發網路請求。
+
+### Phase 2：月營收與估值歷史
+
+目標是把目前每檔一筆 snapshot 擴成可重建的歷史序列，最低先維持 12 個月、最終至少補 60 個月；若上市未滿目標期間則保存上市以來並列明缺口。
 
 - 月營收：以 `revenue_month` 為 effective period，以官方發布／可取得日為 `available_date`；驗證 MoM／YoY 的月份連續性與數值型別。
 - 估值：以交易日為 effective date，保存 PE、PB、殖利率與當日來源；缺值不可用鄰日靜默填補。
-- 每次同步依 symbol／月份或交易日 partition 增量抓取，已存在且 hash 相同的 payload 不重抓。
+- 每次同步依 symbol／月份或交易日 partition 增量抓取，已存在且 hash 相同的 payload 不重抓；目前 12 個月批次已交付，60 個月回補仍須另跑 enrichment profile。
 - 完成門檻：54/54 coverage、目標期間缺口清單可解釋、重跑冪等、source payload hash 可追溯。
 
-### Phase 2：年度財務 facts
+### Phase 3：季度／年度財務與 PIT revision lineage
 
-目標是建立至少 8 個可取得年度的 revenue、gross profit、net income、equity、EPS、ROE facts，並與季度資料分表。
+目標是建立至少 20 季、8 年（或上市／來源邊界）的 revenue、gross profit、net income、equity、EPS、ROE facts，並保留季度／年度 revision lineage。
 
 - 來源順序：TWSE／TPEx OpenAPI 可驗證 facts，MOPS 公開財報作補充與原始依據。
 - 每一列必須有 fiscal year、`available_date` 或 `published_at`；財報發布後才可被 point-in-time query 看見。
 - 同一 fiscal year 的修訂不得覆蓋舊值；以 payload hash、source version 或 revision identity 保存 lineage。
-- 完成門檻：54 檔各年度 coverage 報表、0 duplicate fact identity、PIT replay 測試通過、未知格式進 quarantine。
+- 完成門檻：54 檔季度／年度 coverage 報表、0 duplicate fact identity、PIT replay 測試通過、未知格式進 quarantine；目前 parser/upsert fixture 已有，但 production MOPS/TWSE/TPEx publication runner 尚未接入。
 
-### Phase 3：公司行動與 adjusted series
+### Phase 4：公司行動與 adjusted series
 
 目標是補股利、現金股利、股票股利、分割、合併、除權息與其他會影響價格解讀的事件。
 
@@ -72,25 +83,16 @@ schema v3 另已建立但尚待歷史回補的研究表：`financial_fact_observ
 - adjusted series 必須由事件與固定 derivation version 計算，且可由 raw bars + events 重建。
 - 完成門檻：事件 identity 冪等、跨來源衝突可見、調整前後重建 hash 穩定、事件缺口不被當成「無事件」。
 
-### Phase 4：季度 PIT 與 revision lineage
-
-目前季度表有資料，但不能把 row count 當成 PIT 完整。這一階段補：
-
-- 原始季度 payload 與發布日／可取得日的分離。
-- 同一季度多次修訂的 revision chain、source hash 與 effective/available interval。
-- `as_of` query 只能讀到當時已發布的版本；不能使用後來修訂回填過去研究日。
-- 財務數值與 period price bars 分開驗收；缺季度不可用最近季靜默代替。
-
-### Phase 5：價格狀態、歷史 identity、membership 與品質深化
+### Phase 5：市場脈絡、歷史 identity、membership 與品質深化
 
 - security master 的上市狀態、名稱／產業變動與 effective interval。
 - theme membership 的版本與來源，區分當日 universe 與事後重建 universe。
 - `market_sessions`、停牌/處置、漲跌停與不可交易狀態；成交值、市值、流通股數與週轉率等 market stats。
 - 產業/類股 benchmark bars 與 PIT 成分，避免相對產業表現只用候選股平均值。
 - source SLA、缺口重試、payload retention、raw storage GC 與 schema migration manifest。
-- 將資料集狀態分為 `verified`、`partial`、`quarantined`、`failed`、`planned`，讓報告能直接揭露限制。
+- 將資料集狀態分為 `migrated`、`verified`、`partial`、`quarantined`、`failed`、`not_implemented`，讓報告能直接揭露限制。
 
-### Phase 6：法人流向與事件研究
+### Phase 6：法人、融資融券與事件研究
 
 - 三大法人日/週/月、融資融券、借券、重大訊息、法說會、股東會與股利公告。
 - 先以 research-only 輔助欄位與 warning 使用；達 95% active coverage、PIT 可重建並完成 20 個交易日 shadow test 後，才可申請接入 ranking。
@@ -120,4 +122,4 @@ schema v3 另已建立但尚待歷史回補的研究表：`financial_fact_observ
 
 ## 6. 本輪未宣稱完成的資料回補
 
-本輪已實作 schema、PIT/query、DB-first/incremental、同步狀態與測試，但不在沒有 watchdog、source fixture 與完整 manifest 的情況下宣稱已完成年度／公司行動／法人等網路大量回補。後續回補需使用 enrichment profile、小批次、可恢復 checkpoint 與 read-only verification；未知格式不寫入 canonical，不把未完成資料集接入 ranking，也不把 SQLite/raw payload 上傳 repository。
+本輪已實作 schema、PIT/query、DB-first/incremental、同步狀態與測試，並完成 12 個月月營收及當期財報／公司行動／交易日曆 snapshot；年度 8 年、季度 20 季、完整公司行動歷史、法人等網路大量回補仍未完成。後續回補需使用 enrichment profile、小批次、可恢復 checkpoint 與 read-only verification；未知格式不寫入 canonical，不把未完成資料集接入 ranking，也不把 SQLite/raw payload 上傳 repository。

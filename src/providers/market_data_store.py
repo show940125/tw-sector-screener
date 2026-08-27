@@ -14,6 +14,7 @@ import os
 import re
 import sqlite3
 import tempfile
+import uuid
 from contextlib import closing
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -24,9 +25,12 @@ from src.providers.daily_bar_store import init_db as init_daily_db
 from src.providers.quarterly_store import init_db as init_quarterly_db
 
 
-MARKET_DATA_SCHEMA_VERSION = 3
+MARKET_DATA_SCHEMA_VERSION = 4
 PERIOD_DERIVATION_VERSION = "daily-bars-period-v1"
 SOURCE_PAYLOAD_INLINE_LIMIT_BYTES = 10 * 1024 * 1024
+VALID_SYNC_STATUSES = frozenset(
+    {"migrated", "verified", "partial", "quarantined", "failed", "not_implemented"}
+)
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
@@ -75,6 +79,46 @@ def _ensure_column(
 
     if column not in _columns(conn, table):
         conn.execute(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {definition}')
+
+
+def _canonicalize_monthly_revenue_periods(conn: sqlite3.Connection) -> int:
+    """Normalize legacy ROC revenue keys without creating logical duplicates."""
+
+    rows = conn.execute(
+        "SELECT market, symbol, revenue_month FROM monthly_revenue"
+    ).fetchall()
+    changed = 0
+    for row in rows:
+        raw_period = str(row["revenue_month"] or "").strip()
+        try:
+            canonical_period = _normalize_revenue_month(raw_period)
+        except ValueError:
+            continue
+        if canonical_period == raw_period:
+            continue
+        existing = conn.execute(
+            """
+            SELECT 1 FROM monthly_revenue
+            WHERE market = ? AND symbol = ? AND revenue_month = ?
+            """,
+            (row["market"], row["symbol"], canonical_period),
+        ).fetchone()
+        if existing is not None:
+            # Prefer the canonical key.  A canonical row may be a newer
+            # verified network observation; deleting the legacy alias avoids
+            # double-counting the same company/month in completeness gates.
+            conn.execute(
+                "DELETE FROM monthly_revenue WHERE market = ? AND symbol = ? AND revenue_month = ?",
+                (row["market"], row["symbol"], raw_period),
+            )
+        else:
+            conn.execute(
+                "UPDATE monthly_revenue SET revenue_month = ? "
+                "WHERE market = ? AND symbol = ? AND revenue_month = ?",
+                (canonical_period, row["market"], row["symbol"], raw_period),
+            )
+        changed += 1
+    return changed
 
 
 def _safe_dataset_path(dataset_key: str) -> str:
@@ -198,7 +242,10 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_latest_trade_date TEXT NOT NULL,
                 derivation_version TEXT NOT NULL,
                 generated_at TEXT NOT NULL,
+                available_date TEXT,
                 data_status TEXT NOT NULL DEFAULT 'derived',
+                availability_precision TEXT NOT NULL DEFAULT 'derived_from_daily',
+                data_gap_reason TEXT,
                 PRIMARY KEY (market, symbol, frequency, period_key)
             );
 
@@ -211,6 +258,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_url TEXT NOT NULL,
                 source_payload_sha256 TEXT NOT NULL,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 published_at TEXT,
                 data_status TEXT NOT NULL DEFAULT 'verified',
                 PRIMARY KEY (index_code, trade_date)
@@ -226,6 +274,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_url TEXT NOT NULL,
                 source_payload_sha256 TEXT,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 published_at TEXT,
                 validation_status TEXT NOT NULL DEFAULT 'verified',
                 PRIMARY KEY (market, symbol, effective_date)
@@ -241,6 +290,10 @@ def init_market_data_db(db_path: Path) -> Path:
                 source TEXT NOT NULL,
                 source_payload_sha256 TEXT,
                 recorded_at TEXT NOT NULL,
+                available_date TEXT,
+                published_at TEXT,
+                availability_precision TEXT NOT NULL DEFAULT 'unknown',
+                data_gap_reason TEXT,
                 PRIMARY KEY (theme, symbol, market, universe_mode, effective_from)
             );
 
@@ -255,6 +308,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_url TEXT NOT NULL,
                 source_payload_sha256 TEXT,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 published_at TEXT,
                 validation_status TEXT NOT NULL DEFAULT 'verified',
                 PRIMARY KEY (market, symbol, revenue_month)
@@ -271,6 +325,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_url TEXT NOT NULL,
                 source_payload_sha256 TEXT,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 published_at TEXT,
                 validation_status TEXT NOT NULL DEFAULT 'verified',
                 PRIMARY KEY (market, symbol, trade_date)
@@ -312,6 +367,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_url TEXT NOT NULL,
                 source_payload_sha256 TEXT,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 published_at TEXT,
                 validation_status TEXT NOT NULL DEFAULT 'verified',
                 raw_payload_json TEXT
@@ -326,6 +382,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 request_body_sha256 TEXT,
                 payload_sha256 TEXT NOT NULL,
                 effective_date TEXT,
+                available_date TEXT,
                 published_at TEXT,
                 fetched_at TEXT NOT NULL,
                 cache_file TEXT,
@@ -457,6 +514,62 @@ def init_market_data_db(db_path: Path) -> Path:
                 PRIMARY KEY(dataset_key, market, symbol, partition_key)
             );
 
+            CREATE TABLE IF NOT EXISTS market_data_partition_state (
+                dataset_key TEXT NOT NULL,
+                market TEXT NOT NULL DEFAULT '',
+                symbol TEXT NOT NULL DEFAULT '',
+                partition_key TEXT NOT NULL DEFAULT '',
+                requested_from TEXT,
+                requested_to TEXT,
+                request_method TEXT NOT NULL,
+                request_url TEXT NOT NULL,
+                request_body_sha256 TEXT,
+                payload_sha256 TEXT,
+                source_payload_id TEXT,
+                first_effective_date TEXT,
+                last_effective_date TEXT,
+                row_count INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL,
+                last_verified_at TEXT,
+                last_run_id TEXT,
+                last_completeness_run_id TEXT,
+                gap_reason TEXT,
+                retry_after TEXT,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(dataset_key, market, symbol, partition_key)
+            );
+
+            CREATE TABLE IF NOT EXISTS market_data_gap_ledger (
+                dataset_key TEXT NOT NULL,
+                market TEXT NOT NULL DEFAULT '',
+                symbol TEXT NOT NULL DEFAULT '',
+                partition_key TEXT NOT NULL DEFAULT '',
+                reason TEXT NOT NULL,
+                detail TEXT NOT NULL,
+                first_seen_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                occurrence_count INTEGER NOT NULL DEFAULT 1,
+                latest_run_id TEXT,
+                retry_after TEXT,
+                status TEXT NOT NULL DEFAULT 'open',
+                PRIMARY KEY(dataset_key, market, symbol, partition_key)
+            );
+
+            CREATE TABLE IF NOT EXISTS market_data_completeness_runs (
+                completeness_run_id TEXT PRIMARY KEY,
+                run_id TEXT,
+                dataset_key TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                status TEXT NOT NULL,
+                expected_rows INTEGER,
+                actual_rows INTEGER,
+                expected_partitions INTEGER,
+                actual_partitions INTEGER,
+                missing_partitions_json TEXT NOT NULL DEFAULT '[]',
+                summary_json TEXT NOT NULL DEFAULT '{}'
+            );
+
             CREATE TABLE IF NOT EXISTS market_data_quality_issues (
                 issue_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 dataset_key TEXT NOT NULL,
@@ -519,8 +632,11 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_payload_id TEXT,
                 source_payload_sha256 TEXT,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 published_at TEXT,
                 validation_status TEXT NOT NULL DEFAULT 'verified',
+                availability_precision TEXT NOT NULL DEFAULT 'unknown',
+                data_gap_reason TEXT,
                 PRIMARY KEY (market, trade_date)
             );
 
@@ -537,6 +653,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_payload_id TEXT,
                 source_payload_sha256 TEXT,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 published_at TEXT,
                 validation_status TEXT NOT NULL DEFAULT 'verified',
                 PRIMARY KEY (market, symbol, effective_date)
@@ -556,6 +673,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_endpoint TEXT NOT NULL,
                 source_url TEXT NOT NULL,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 published_at TEXT,
                 validation_status TEXT NOT NULL DEFAULT 'verified',
                 PRIMARY KEY (market, symbol, effective_date)
@@ -575,7 +693,9 @@ def init_market_data_db(db_path: Path) -> Path:
                 derivation_version TEXT NOT NULL,
                 source_latest_trade_date TEXT NOT NULL,
                 generated_at TEXT NOT NULL,
+                available_date TEXT,
                 data_status TEXT NOT NULL DEFAULT 'derived',
+                derivation_input_sha256 TEXT,
                 PRIMARY KEY (market, symbol, trade_date, price_mode)
             );
 
@@ -594,6 +714,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_payload_id TEXT,
                 source_payload_sha256 TEXT,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 published_at TEXT,
                 validation_status TEXT NOT NULL DEFAULT 'verified',
                 PRIMARY KEY (market, symbol, effective_from)
@@ -611,6 +732,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_payload_id TEXT,
                 source_payload_sha256 TEXT,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 published_at TEXT,
                 validation_status TEXT NOT NULL DEFAULT 'verified',
                 PRIMARY KEY (benchmark_code, symbol, effective_from)
@@ -631,6 +753,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_payload_id TEXT,
                 source_payload_sha256 TEXT,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 published_at TEXT,
                 validation_status TEXT NOT NULL DEFAULT 'verified',
                 PRIMARY KEY (market, symbol, trade_date)
@@ -654,6 +777,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_payload_id TEXT,
                 source_payload_sha256 TEXT,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 published_at TEXT,
                 validation_status TEXT NOT NULL DEFAULT 'verified',
                 PRIMARY KEY (market, symbol, trade_date)
@@ -675,6 +799,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_payload_id TEXT,
                 source_payload_sha256 TEXT,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 published_at TEXT,
                 validation_status TEXT NOT NULL DEFAULT 'verified',
                 PRIMARY KEY (market, symbol, trade_date)
@@ -694,6 +819,7 @@ def init_market_data_db(db_path: Path) -> Path:
                 source_payload_id TEXT,
                 source_payload_sha256 TEXT,
                 fetched_at TEXT NOT NULL,
+                available_date TEXT,
                 validation_status TEXT NOT NULL DEFAULT 'verified',
                 raw_payload_json TEXT
             );
@@ -726,6 +852,14 @@ def init_market_data_db(db_path: Path) -> Path:
             ON market_data_fetch_attempts(dataset_key, symbol, started_at);
             CREATE INDEX IF NOT EXISTS idx_sync_items_run_status
             ON market_data_sync_items(run_id, status);
+            CREATE INDEX IF NOT EXISTS idx_partition_state_dataset_status
+            ON market_data_partition_state(dataset_key, status, last_verified_at);
+            CREATE INDEX IF NOT EXISTS idx_partition_state_effective_range
+            ON market_data_partition_state(dataset_key, first_effective_date, last_effective_date);
+            CREATE INDEX IF NOT EXISTS idx_gap_ledger_dataset_status
+            ON market_data_gap_ledger(dataset_key, status, last_seen_at);
+            CREATE INDEX IF NOT EXISTS idx_completeness_runs_dataset_status
+            ON market_data_completeness_runs(dataset_key, status, started_at);
             CREATE INDEX IF NOT EXISTS idx_quality_issue_dataset_status
             ON market_data_quality_issues(dataset_key, status, last_seen_at);
             CREATE INDEX IF NOT EXISTS idx_quality_occurrence_issue_date
@@ -774,6 +908,7 @@ def init_market_data_db(db_path: Path) -> Path:
             ("revision_id", "TEXT"),
             ("revision_sequence", "INTEGER"),
             ("validation_status", "TEXT NOT NULL DEFAULT 'migrated'"),
+            ("availability_precision", "TEXT NOT NULL DEFAULT 'unknown'"),
             ("data_gap_reason", "TEXT"),
         ):
             _ensure_column(conn, "quarterly_company_fundamentals", column, definition)
@@ -795,10 +930,99 @@ def init_market_data_db(db_path: Path) -> Path:
             "corporate_actions",
         ):
             _ensure_column(conn, table, "source_payload_id", "TEXT")
+        for table in (
+            "period_bars",
+            "daily_bars",
+            "daily_bar_sources",
+            "index_bars",
+            "security_master_snapshots",
+            "universe_membership",
+            "monthly_revenue",
+            "valuation_snapshots",
+            "annual_company_fundamentals",
+            "corporate_actions",
+            "financial_fact_observations",
+            "market_sessions",
+            "security_trading_status",
+            "adjustment_factors",
+            "adjusted_bars",
+            "security_lifecycle",
+            "benchmark_membership",
+            "daily_market_stats",
+            "institutional_flows",
+            "margin_short_snapshots",
+            "market_events",
+            "source_payloads",
+        ):
+            _ensure_column(conn, table, "available_date", "TEXT")
+        _ensure_column(conn, "universe_membership", "published_at", "TEXT")
+        for table in (
+            "period_bars",
+            "daily_bars",
+            "daily_bar_sources",
+            "index_bars",
+            "security_master_snapshots",
+            "universe_membership",
+            "quarterly_company_fundamentals",
+            "monthly_revenue",
+            "valuation_snapshots",
+            "annual_company_fundamentals",
+            "corporate_actions",
+            "financial_fact_observations",
+            "market_sessions",
+            "security_trading_status",
+            "adjustment_factors",
+            "adjusted_bars",
+            "security_lifecycle",
+            "benchmark_membership",
+            "daily_market_stats",
+            "institutional_flows",
+            "margin_short_snapshots",
+            "market_events",
+        ):
+            _ensure_column(
+                conn,
+                table,
+                "availability_precision",
+                "TEXT NOT NULL DEFAULT 'unknown'",
+            )
+        for table in (
+            "period_bars",
+            "daily_bars",
+            "daily_bar_sources",
+            "index_bars",
+            "security_master_snapshots",
+            "universe_membership",
+            "quarterly_company_fundamentals",
+            "monthly_revenue",
+            "valuation_snapshots",
+            "annual_company_fundamentals",
+            "corporate_actions",
+            "financial_fact_observations",
+            "market_sessions",
+            "security_trading_status",
+            "adjustment_factors",
+            "adjusted_bars",
+            "security_lifecycle",
+            "benchmark_membership",
+            "daily_market_stats",
+            "institutional_flows",
+            "margin_short_snapshots",
+            "market_events",
+        ):
+            _ensure_column(conn, table, "data_gap_reason", "TEXT")
         _ensure_column(conn, "source_payloads", "storage_mode", "TEXT NOT NULL DEFAULT 'inline'")
         _ensure_column(conn, "source_payloads", "storage_uri", "TEXT")
         _ensure_column(conn, "source_payloads", "byte_size", "INTEGER")
         _ensure_column(conn, "source_payloads", "content_encoding", "TEXT NOT NULL DEFAULT 'utf-8'")
+        _ensure_column(conn, "adjusted_bars", "derivation_input_sha256", "TEXT")
+        _ensure_column(
+            conn,
+            "source_payloads",
+            "availability_precision",
+            "TEXT NOT NULL DEFAULT 'unknown'",
+        )
+        _canonicalize_monthly_revenue_periods(conn)
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_quarterly_pit_available "
             "ON quarterly_company_fundamentals(market, symbol, effective_date, available_date)"
@@ -942,6 +1166,17 @@ def _ready_market_data_db(db_path: Path) -> Path:
         )
     if version < MARKET_DATA_SCHEMA_VERSION:
         return init_market_data_db(path)
+    # v4 databases created before the Gregorian-period migration may already
+    # be at the current schema version. Run this one-time data correction
+    # without replaying the full DDL on every canonical row write.
+    with closing(_connect(path)) as conn:
+        marker = conn.execute(
+            "SELECT value FROM schema_meta WHERE key = 'monthly_revenue_period_normalization'"
+        ).fetchone()
+        if marker is None or str(marker[0]) != "v1":
+            _canonicalize_monthly_revenue_periods(conn)
+            _meta(conn, "monthly_revenue_period_normalization", "v1")
+            conn.commit()
     return path
 
 
@@ -949,6 +1184,24 @@ def _iso_value(value: date | str | None) -> str | None:
     if value is None:
         return None
     return value.isoformat() if isinstance(value, date) else str(value)
+
+
+def _normalize_revenue_month(value: str) -> str:
+    """Store revenue periods canonically as Gregorian ``YYYY-MM``."""
+
+    raw = str(value or "").strip()
+    digits = re.sub(r"[^0-9]", "", raw)
+    try:
+        if len(digits) == 5:
+            year, month = int(digits[:3]) + 1911, int(digits[3:])
+        elif len(digits) >= 6:
+            year, month = int(digits[:4]), int(digits[4:6])
+        else:
+            raise ValueError
+        date(year, month, 1)
+    except ValueError as exc:
+        raise ValueError(f"invalid revenue_month: {value}") from exc
+    return f"{year:04d}-{month:02d}"
 
 
 def _financial_fact_identity(
@@ -1023,6 +1276,7 @@ def upsert_financial_fact(
     fetched_at: str | None = None,
     validation_status: str = "verified",
     data_gap_reason: str | None = None,
+    availability_precision: str = "unknown",
     raw_payload_json: str | dict[str, Any] | None = None,
 ) -> str:
     """Idempotently store one point-in-time financial observation."""
@@ -1052,7 +1306,12 @@ def upsert_financial_fact(
     if int(revision_sequence) < 1:
         raise ValueError("revision_sequence must be positive")
     if isinstance(raw_payload_json, dict):
-        raw_payload_text = json.dumps(raw_payload_json, ensure_ascii=False, sort_keys=True)
+        raw_payload_text = json.dumps(
+            raw_payload_json,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
     else:
         raw_payload_text = raw_payload_json
     normalized_revision = revision_id or source_payload_sha256 or "revision-1"
@@ -1074,8 +1333,8 @@ def upsert_financial_fact(
                 consolidation, dimension_json, effective_date, available_date,
                 published_at, revision_id, revision_sequence, source_payload_id,
                 source_payload_sha256, source_endpoint, source_url, fetched_at,
-                validation_status, data_gap_reason, raw_payload_json
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                validation_status, data_gap_reason, availability_precision, raw_payload_json
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(fact_id) DO UPDATE SET
                 value=excluded.value,
                 published_at=excluded.published_at,
@@ -1087,6 +1346,7 @@ def upsert_financial_fact(
                 fetched_at=excluded.fetched_at,
                 validation_status=excluded.validation_status,
                 data_gap_reason=excluded.data_gap_reason,
+                availability_precision=excluded.availability_precision,
                 raw_payload_json=excluded.raw_payload_json
             """,
             (
@@ -1111,6 +1371,7 @@ def upsert_financial_fact(
                 fetched_at or _now_iso(),
                 validation_status,
                 data_gap_reason,
+                availability_precision or "unknown",
                 raw_payload_text,
             ),
         )
@@ -1140,13 +1401,16 @@ def query_financial_facts_as_of(
         "market = ?",
         "symbol = ?",
         "effective_date <= ?",
-        "available_date <= ?",
+        "((available_date IS NOT NULL AND available_date != '' AND substr(available_date, 1, 10) <= ?) "
+        "OR (published_at IS NOT NULL AND substr(published_at, 1, 10) <= ?))",
         "validation_status = 'verified'",
+        "COALESCE(availability_precision, 'unknown') != 'retrieval_date'",
     ]
     params: list[Any] = [
         market,
         symbol,
         observation_date.isoformat(),
+        information_cutoff.isoformat(),
         information_cutoff.isoformat(),
     ]
     if fact_code:
@@ -1228,7 +1492,7 @@ def query_market_data_as_of(
             information_cutoff=information_cutoff,
         )
     table_by_dataset = {
-        "daily_bars": ("daily_bars", "effective_date", "published_at"),
+        "daily_bars": ("daily_bars", "effective_date", "available_date"),
         "monthly_revenue": ("monthly_revenue", "revenue_month", "available_date"),
         "valuation_snapshots": ("valuation_snapshots", "trade_date", "available_date"),
     }
@@ -1237,16 +1501,22 @@ def query_market_data_as_of(
     table, effective_column, available_column = table_by_dataset[dataset]
     conditions = [
         "validation_status = 'verified'" if table != "daily_bars" else "data_status = 'verified'",
-        f"{available_column} IS NOT NULL",
-        f"{available_column} <= ?",
+        f"(({available_column} IS NOT NULL AND {available_column} != '' "
+        f"AND substr({available_column}, 1, 10) <= ?) "
+        f"OR (published_at IS NOT NULL AND substr(published_at, 1, 10) <= ?))",
     ]
-    params: list[Any] = [information_cutoff.isoformat()]
+    params: list[Any] = [information_cutoff.isoformat(), information_cutoff.isoformat()]
     if table == "daily_bars":
         conditions.append(f"{effective_column} <= ?")
         params.append(observation_date.isoformat())
     elif table == "valuation_snapshots":
         conditions.append(f"{effective_column} <= ?")
         params.append(observation_date.isoformat())
+    if table == "monthly_revenue":
+        # A retrieval date proves only that the payload was seen locally; it
+        # does not prove when the issuer/exchange published the observation.
+        # Such rows remain available for descriptive work but are not PIT-safe.
+        conditions.append("COALESCE(availability_precision, 'unknown') != 'retrieval_date'")
     else:
         # TWSE/TPEx payloads commonly store ROC months such as ``11507``;
         # normalize them after retrieval instead of relying on lexical SQL
@@ -1293,7 +1563,7 @@ def _upsert_research_row(
     key_columns: tuple[str, ...],
     values: dict[str, Any],
 ) -> None:
-    """Upsert a row in one of the schema-v3 research tables.
+    """Upsert a row in one of the schema-v4 research tables.
 
     Table and column names are supplied only by module code, never by a
     caller-facing SQL string.  Keeping this helper private gives the public
@@ -1302,7 +1572,16 @@ def _upsert_research_row(
     """
 
     db_path = _ready_market_data_db(Path(db_path))
-    columns = tuple(values)
+    prepared_values = dict(values)
+    raw_payload = prepared_values.get("raw_payload_json")
+    if isinstance(raw_payload, (dict, list)):
+        prepared_values["raw_payload_json"] = json.dumps(
+            raw_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
+    columns = tuple(prepared_values)
     names = ", ".join(f'"{column}"' for column in columns)
     placeholders = ", ".join("?" for _ in columns)
     updates = ", ".join(
@@ -1316,7 +1595,7 @@ def _upsert_research_row(
         f'ON CONFLICT ({conflict}) DO UPDATE SET {updates}'
     )
     with closing(_connect(db_path)) as conn:
-        conn.execute(statement, tuple(values[column] for column in columns))
+        conn.execute(statement, tuple(prepared_values[column] for column in columns))
         conn.commit()
     payload_id = values.get("source_payload_id")
     if payload_id:
@@ -1338,6 +1617,9 @@ def _research_common_values(
     fetched_at: str | None,
     published_at: str | None,
     validation_status: str,
+    available_date: date | str | None = None,
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
 ) -> dict[str, Any]:
     return {
         "source_endpoint": source_endpoint,
@@ -1345,8 +1627,11 @@ def _research_common_values(
         "source_payload_id": source_payload_id,
         "source_payload_sha256": source_payload_sha256,
         "fetched_at": fetched_at or _now_iso(),
+        "available_date": _iso_value(available_date),
         "published_at": published_at,
         "validation_status": validation_status,
+        "availability_precision": availability_precision or "unknown",
+        "data_gap_reason": data_gap_reason,
     }
 
 
@@ -1363,7 +1648,10 @@ def upsert_market_session(
     source_payload_sha256: str | None = None,
     fetched_at: str | None = None,
     published_at: str | None = None,
+    available_date: date | str | None = None,
     validation_status: str = "verified",
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
 ) -> None:
     _upsert_research_row(
         db_path,
@@ -1381,7 +1669,10 @@ def upsert_market_session(
                 source_payload_sha256=source_payload_sha256,
                 fetched_at=fetched_at,
                 published_at=published_at,
+                available_date=available_date,
                 validation_status=validation_status,
+                availability_precision=availability_precision,
+                data_gap_reason=data_gap_reason,
             ),
         },
     )
@@ -1403,7 +1694,10 @@ def upsert_security_trading_status(
     source_payload_sha256: str | None = None,
     fetched_at: str | None = None,
     published_at: str | None = None,
+    available_date: date | str | None = None,
     validation_status: str = "verified",
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
 ) -> None:
     _upsert_research_row(
         db_path,
@@ -1424,7 +1718,10 @@ def upsert_security_trading_status(
                 source_payload_sha256=source_payload_sha256,
                 fetched_at=fetched_at,
                 published_at=published_at,
+                available_date=available_date,
                 validation_status=validation_status,
+                availability_precision=availability_precision,
+                data_gap_reason=data_gap_reason,
             ),
         },
     )
@@ -1447,7 +1744,10 @@ def upsert_adjustment_factor(
     source_payload_sha256: str | None = None,
     fetched_at: str | None = None,
     published_at: str | None = None,
+    available_date: date | str | None = None,
     validation_status: str = "verified",
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
 ) -> None:
     if float(price_factor) <= 0:
         raise ValueError("price_factor must be positive")
@@ -1471,7 +1771,10 @@ def upsert_adjustment_factor(
                 source_payload_sha256=source_payload_sha256,
                 fetched_at=fetched_at,
                 published_at=published_at,
+                available_date=available_date,
                 validation_status=validation_status,
+                availability_precision=availability_precision,
+                data_gap_reason=data_gap_reason,
             ),
         },
     )
@@ -1573,8 +1876,42 @@ def rebuild_adjusted_bars(
             factor_map.setdefault((str(row["market"]), str(row["symbol"])), []).append(
                 (str(row["effective_date"]), float(row["price_factor"]))
             )
+        input_hash = hashlib.sha256(
+            json.dumps(
+                {
+                    "price_mode": price_mode,
+                    "derivation_version": derivation_version,
+                    "bars": [
+                        {
+                            "market": str(row["market"]),
+                            "symbol": str(row["symbol"]),
+                            "trade_date": str(row["trade_date"]),
+                            "open": float(row["open"]),
+                            "high": float(row["high"]),
+                            "low": float(row["low"]),
+                            "close": float(row["close"]),
+                            "volume": float(row["volume"]),
+                        }
+                        for row in bars
+                    ],
+                    "factors": [
+                        {
+                            "market": str(row["market"]),
+                            "symbol": str(row["symbol"]),
+                            "effective_date": str(row["effective_date"]),
+                            "price_factor": float(row["price_factor"]),
+                        }
+                        for row in factors
+                    ],
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
         generated_at = _now_iso()
         latest_by_symbol: dict[tuple[str, str], str] = {}
+        derived_rows: list[dict[str, Any]] = []
         for row in bars:
             key = (str(row["market"]), str(row["symbol"]))
             latest_by_symbol[key] = max(latest_by_symbol.get(key, ""), str(row["trade_date"]))
@@ -1585,13 +1922,30 @@ def rebuild_adjusted_bars(
             for effective_date, event_factor in factor_map.get(key, []):
                 if trade_date < effective_date:
                     factor *= event_factor
+            derived_rows.append(
+                {
+                    "market": key[0],
+                    "symbol": key[1],
+                    "trade_date": trade_date,
+                    "price_mode": price_mode,
+                    "open": float(row["open"]) * factor,
+                    "high": float(row["high"]) * factor,
+                    "low": float(row["low"]) * factor,
+                    "close": float(row["close"]) * factor,
+                    "volume": float(row["volume"]) / factor,
+                    "adjustment_factor": factor,
+                    "source_latest_trade_date": latest_by_symbol[key],
+                    "available_date": latest_by_symbol[key],
+                }
+            )
             conn.execute(
                 """
                 INSERT INTO adjusted_bars(
                     market, symbol, trade_date, price_mode, open, high, low, close,
                     volume, adjustment_factor, derivation_version,
-                    source_latest_trade_date, generated_at, data_status
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'derived')
+                    source_latest_trade_date, generated_at, available_date, data_status,
+                    derivation_input_sha256
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'derived', ?)
                 ON CONFLICT(market, symbol, trade_date, price_mode) DO UPDATE SET
                     open=excluded.open, high=excluded.high, low=excluded.low,
                     close=excluded.close, volume=excluded.volume,
@@ -1599,7 +1953,9 @@ def rebuild_adjusted_bars(
                     derivation_version=excluded.derivation_version,
                     source_latest_trade_date=excluded.source_latest_trade_date,
                     generated_at=excluded.generated_at,
-                    data_status=excluded.data_status
+                    available_date=excluded.available_date,
+                    data_status=excluded.data_status,
+                    derivation_input_sha256=excluded.derivation_input_sha256
                 """,
                 (
                     row["market"],
@@ -1615,15 +1971,22 @@ def rebuild_adjusted_bars(
                     derivation_version,
                     latest_by_symbol[key],
                     generated_at,
+                    latest_by_symbol[key],
+                    input_hash,
                 ),
             )
         conn.commit()
+    series_hash = hashlib.sha256(
+        json.dumps(derived_rows, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     return {
         "rows_read": len(bars),
         "bars_upserted": len(bars),
         "symbols": len(latest_by_symbol),
         "price_mode": price_mode,
         "derivation_version": derivation_version,
+        "derivation_input_sha256": input_hash,
+        "derived_series_sha256": series_hash,
     }
 
 
@@ -1645,7 +2008,10 @@ def upsert_security_lifecycle(
     source_payload_sha256: str | None = None,
     fetched_at: str | None = None,
     published_at: str | None = None,
+    available_date: date | str | None = None,
     validation_status: str = "verified",
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
 ) -> None:
     _upsert_research_row(
         db_path,
@@ -1668,7 +2034,10 @@ def upsert_security_lifecycle(
                 source_payload_sha256=source_payload_sha256,
                 fetched_at=fetched_at,
                 published_at=published_at,
+                available_date=available_date,
                 validation_status=validation_status,
+                availability_precision=availability_precision,
+                data_gap_reason=data_gap_reason,
             ),
         },
     )
@@ -1689,7 +2058,10 @@ def upsert_benchmark_membership(
     source_payload_sha256: str | None = None,
     fetched_at: str | None = None,
     published_at: str | None = None,
+    available_date: date | str | None = None,
     validation_status: str = "verified",
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
 ) -> None:
     _upsert_research_row(
         db_path,
@@ -1709,7 +2081,10 @@ def upsert_benchmark_membership(
                 source_payload_sha256=source_payload_sha256,
                 fetched_at=fetched_at,
                 published_at=published_at,
+                available_date=available_date,
                 validation_status=validation_status,
+                availability_precision=availability_precision,
+                data_gap_reason=data_gap_reason,
             ),
         },
     )
@@ -1733,7 +2108,10 @@ def upsert_daily_market_stats(
     source_payload_sha256: str | None = None,
     fetched_at: str | None = None,
     published_at: str | None = None,
+    available_date: date | str | None = None,
     validation_status: str = "verified",
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
 ) -> None:
     _upsert_research_row(
         db_path,
@@ -1756,7 +2134,10 @@ def upsert_daily_market_stats(
                 source_payload_sha256=source_payload_sha256,
                 fetched_at=fetched_at,
                 published_at=published_at,
+                available_date=available_date,
                 validation_status=validation_status,
+                availability_precision=availability_precision,
+                data_gap_reason=data_gap_reason,
             ),
         },
     )
@@ -1783,7 +2164,10 @@ def upsert_institutional_flow(
     source_payload_sha256: str | None = None,
     fetched_at: str | None = None,
     published_at: str | None = None,
+    available_date: date | str | None = None,
     validation_status: str = "verified",
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
 ) -> None:
     _upsert_research_row(
         db_path,
@@ -1809,7 +2193,10 @@ def upsert_institutional_flow(
                 source_payload_sha256=source_payload_sha256,
                 fetched_at=fetched_at,
                 published_at=published_at,
+                available_date=available_date,
                 validation_status=validation_status,
+                availability_precision=availability_precision,
+                data_gap_reason=data_gap_reason,
             ),
         },
     )
@@ -1834,7 +2221,10 @@ def upsert_margin_short_snapshot(
     source_payload_sha256: str | None = None,
     fetched_at: str | None = None,
     published_at: str | None = None,
+    available_date: date | str | None = None,
     validation_status: str = "verified",
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
 ) -> None:
     _upsert_research_row(
         db_path,
@@ -1858,7 +2248,10 @@ def upsert_margin_short_snapshot(
                 source_payload_sha256=source_payload_sha256,
                 fetched_at=fetched_at,
                 published_at=published_at,
+                available_date=available_date,
                 validation_status=validation_status,
+                availability_precision=availability_precision,
+                data_gap_reason=data_gap_reason,
             ),
         },
     )
@@ -1880,7 +2273,10 @@ def upsert_market_event(
     source_payload_id: str | None = None,
     source_payload_sha256: str | None = None,
     fetched_at: str | None = None,
+    available_date: date | str | None = None,
     validation_status: str = "verified",
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
     raw_payload_json: str | dict[str, Any] | None = None,
 ) -> None:
     if isinstance(raw_payload_json, dict):
@@ -1904,7 +2300,10 @@ def upsert_market_event(
                 source_payload_sha256=source_payload_sha256,
                 fetched_at=fetched_at,
                 published_at=published_at,
+                available_date=available_date,
                 validation_status=validation_status,
+                availability_precision=availability_precision,
+                data_gap_reason=data_gap_reason,
             ),
             "raw_payload_json": raw_payload_json,
         },
@@ -1969,6 +2368,49 @@ def get_latest_monthly_revenue(
     return output
 
 
+def get_monthly_revenue_history(
+    db_path: Path,
+    *,
+    market: str | None = None,
+    symbol: str | None = None,
+    as_of: date | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Read verified monthly revenue rows without mutating the database.
+
+    ``as_of`` is an information cutoff, not an observation-date filter: a row
+    is eligible only when its explicit ``available_date`` is known and no
+    later than the cutoff.  Rows imported from legacy stores with no
+    availability date stay out of this PIT-oriented history API.
+    """
+
+    conditions = [
+        "validation_status = 'verified'",
+        "available_date IS NOT NULL",
+    ]
+    params: list[Any] = []
+    if market is not None:
+        conditions.append("market = ?")
+        params.append(str(market))
+    if symbol is not None:
+        conditions.append("symbol = ?")
+        params.append(str(symbol))
+    if as_of is not None:
+        conditions.append("available_date <= ?")
+        params.append(as_of.isoformat())
+    statement = (
+        "SELECT * FROM monthly_revenue WHERE "
+        + " AND ".join(conditions)
+        + " ORDER BY market, symbol, revenue_month"
+    )
+    if limit is not None:
+        statement += " LIMIT ?"
+        params.append(max(int(limit), 0))
+    with closing(_read_only_connect(Path(db_path))) as conn:
+        rows = conn.execute(statement, params).fetchall()
+    return [dict(row) for row in rows]
+
+
 def get_valuation_snapshot_as_of(
     db_path: Path,
     *,
@@ -1994,6 +2436,74 @@ def get_valuation_snapshot_as_of(
             (market, symbol, earliest_date, as_of.isoformat(), as_of.isoformat()),
         ).fetchone()
     return dict(row) if row is not None else None
+
+
+def get_valuation_history(
+    db_path: Path,
+    *,
+    market: str | None = None,
+    symbol: str | None = None,
+    as_of: date | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Read verified valuation snapshots using their real observation date."""
+
+    conditions = ["validation_status = 'verified'"]
+    params: list[Any] = []
+    if market is not None:
+        conditions.append("market = ?")
+        params.append(str(market))
+    if symbol is not None:
+        conditions.append("symbol = ?")
+        params.append(str(symbol))
+    if as_of is not None:
+        conditions.append("trade_date <= ?")
+        params.append(as_of.isoformat())
+    statement = (
+        "SELECT * FROM valuation_snapshots WHERE "
+        + " AND ".join(conditions)
+        + " ORDER BY market, symbol, trade_date"
+    )
+    if limit is not None:
+        statement += " LIMIT ?"
+        params.append(max(int(limit), 0))
+    with closing(_read_only_connect(Path(db_path))) as conn:
+        rows = conn.execute(statement, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_financial_facts_history(
+    db_path: Path,
+    *,
+    market: str | None = None,
+    symbol: str | None = None,
+    information_cutoff: date | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Read verified facts, retaining every revision for replay/audit."""
+
+    conditions = ["validation_status = 'verified'"]
+    params: list[Any] = []
+    if market is not None:
+        conditions.append("market = ?")
+        params.append(str(market))
+    if symbol is not None:
+        conditions.append("symbol = ?")
+        params.append(str(symbol))
+    if information_cutoff is not None:
+        conditions.append("available_date <= ?")
+        params.append(information_cutoff.isoformat())
+    statement = (
+        "SELECT * FROM financial_fact_observations WHERE "
+        + " AND ".join(conditions)
+        + " ORDER BY market, symbol, fact_code, fiscal_period, available_date, revision_sequence"
+    )
+    if limit is not None:
+        statement += " LIMIT ?"
+        params.append(max(int(limit), 0))
+    with closing(_read_only_connect(Path(db_path))) as conn:
+        rows = conn.execute(statement, params).fetchall()
+    return [dict(row) for row in rows]
 
 
 def _copy_table_rows(
@@ -2107,7 +2617,7 @@ def backfill_sync_state_from_canonical(db_path: Path) -> dict[str, Any]:
     db_path = init_market_data_db(Path(db_path))
     with closing(_connect(db_path)) as conn:
         marker = conn.execute(
-            "SELECT value FROM schema_meta WHERE key = 'market_data_sync_state_backfill_v2'"
+            "SELECT value FROM schema_meta WHERE key = 'market_data_sync_state_backfill_v4'"
         ).fetchone()
         if marker is not None:
             return {"status": "already_backfilled", "rows_inserted": 0}
@@ -2431,6 +2941,60 @@ def backfill_sync_state_from_canonical(db_path: Path) -> dict[str, Any]:
                 GROUP BY market, COALESCE(symbol, ''), event_type
                 """,
             ),
+            (
+                "partition_state_migrated",
+                """
+                INSERT OR IGNORE INTO market_data_partition_state(
+                    dataset_key, market, symbol, partition_key,
+                    requested_from, requested_to, request_method, request_url,
+                    first_effective_date, last_effective_date, row_count, status,
+                    last_verified_at, gap_reason, updated_at
+                )
+                SELECT 'daily_bars', market, symbol, substr(trade_date, 1, 7),
+                       MIN(trade_date), MAX(trade_date), 'migrated',
+                       'migration://daily_bars', MIN(trade_date), MAX(trade_date),
+                       COUNT(*), 'migrated', NULL, 'legacy_import', ?
+                FROM daily_bars
+                WHERE data_status = 'verified'
+                GROUP BY market, symbol, substr(trade_date, 1, 7)
+                """,
+            ),
+            (
+                "partition_state_revenue_migrated",
+                """
+                INSERT OR IGNORE INTO market_data_partition_state(
+                    dataset_key, market, symbol, partition_key,
+                    requested_from, requested_to, request_method, request_url,
+                    first_effective_date, last_effective_date, row_count, status,
+                    last_verified_at, gap_reason, updated_at
+                )
+                SELECT 'monthly_revenue', market, symbol, revenue_month,
+                       revenue_month || '-01', revenue_month || '-01', 'migration',
+                       'migration://monthly_revenue', revenue_month || '-01',
+                       revenue_month || '-01', COUNT(*), 'migrated', NULL,
+                       'legacy_import', ?
+                FROM monthly_revenue
+                GROUP BY market, symbol, revenue_month
+                """,
+            ),
+            (
+                "partition_state_valuation_migrated",
+                """
+                INSERT OR IGNORE INTO market_data_partition_state(
+                    dataset_key, market, symbol, partition_key,
+                    requested_from, requested_to, request_method, request_url,
+                    first_effective_date, last_effective_date, row_count, status,
+                    last_verified_at, gap_reason, updated_at
+                )
+                SELECT 'valuation_snapshots', market, symbol, substr(trade_date, 1, 7),
+                       MIN(trade_date), MAX(trade_date), 'migration',
+                       'migration://valuation_snapshots', MIN(trade_date),
+                       MAX(trade_date), COUNT(*), 'migrated', NULL,
+                       'legacy_import', ?
+                FROM valuation_snapshots
+                GROUP BY market, symbol, substr(trade_date, 1, 7)
+                """,
+            ),
         )
         inserted = 0
         by_dataset: dict[str, int] = {}
@@ -2442,6 +3006,8 @@ def backfill_sync_state_from_canonical(db_path: Path) -> dict[str, Any]:
             inserted += delta
         _meta(conn, "market_data_sync_state_backfill_v1", now)
         _meta(conn, "market_data_sync_state_backfill_v2", now)
+        _meta(conn, "market_data_sync_state_backfill_v3", now)
+        _meta(conn, "market_data_sync_state_backfill_v4", now)
         conn.commit()
     return {"status": "backfilled", "rows_inserted": inserted, "by_dataset": by_dataset}
 
@@ -2563,8 +3129,10 @@ def rebuild_period_bars(
                 INSERT INTO period_bars(
                     market, symbol, frequency, period_key, period_start, period_end,
                     open, high, low, close, volume, trading_day_count,
-                    source_latest_trade_date, derivation_version, generated_at, data_status
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'derived')
+                    source_latest_trade_date, derivation_version, generated_at, available_date, data_status,
+                    availability_precision, data_gap_reason
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'derived',
+                    'derived_from_daily', NULL)
                 ON CONFLICT(market, symbol, frequency, period_key) DO UPDATE SET
                     period_start=excluded.period_start,
                     period_end=excluded.period_end,
@@ -2577,7 +3145,10 @@ def rebuild_period_bars(
                     source_latest_trade_date=excluded.source_latest_trade_date,
                     derivation_version=excluded.derivation_version,
                     generated_at=excluded.generated_at,
-                    data_status=excluded.data_status
+                    available_date=excluded.available_date,
+                    data_status=excluded.data_status,
+                    availability_precision=excluded.availability_precision,
+                    data_gap_reason=excluded.data_gap_reason
                 """,
                 (
                     row_market,
@@ -2595,6 +3166,7 @@ def rebuild_period_bars(
                     last_day.isoformat(),
                     PERIOD_DERIVATION_VERSION,
                     generated_at,
+                    last_day.isoformat(),
                 ),
             )
         conn.commit()
@@ -2615,10 +3187,12 @@ def record_source_payload(
     payload: Any,
     fetched_at: str | None = None,
     effective_date: str | None = None,
+    available_date: str | None = None,
     published_at: str | None = None,
     cache_file: str | None = None,
     validation_status: str = "unvalidated",
     validation_error: str | None = None,
+    availability_precision: str = "unknown",
     request_body_sha256: str | None = None,
     raw_storage_root: Path | None = None,
     inline_limit_bytes: int = SOURCE_PAYLOAD_INLINE_LIMIT_BYTES,
@@ -2683,13 +3257,14 @@ def record_source_payload(
             INSERT INTO source_payloads(
                 payload_id, dataset_key, request_method, source_endpoint, source_url,
                 request_body_sha256, payload_sha256, effective_date, published_at,
-                fetched_at, cache_file, validation_status, validation_error, raw_payload_json,
-                storage_mode, storage_uri, byte_size, content_encoding
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                available_date, fetched_at, cache_file, validation_status, validation_error, raw_payload_json,
+                storage_mode, storage_uri, byte_size, content_encoding, availability_precision
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(payload_id) DO UPDATE SET
                 source_endpoint=excluded.source_endpoint,
                 source_url=excluded.source_url,
                 effective_date=excluded.effective_date,
+                available_date=excluded.available_date,
                 published_at=excluded.published_at,
                 fetched_at=excluded.fetched_at,
                 cache_file=excluded.cache_file,
@@ -2699,7 +3274,8 @@ def record_source_payload(
                 storage_mode=excluded.storage_mode,
                 storage_uri=excluded.storage_uri,
                 byte_size=excluded.byte_size,
-                content_encoding=excluded.content_encoding
+                content_encoding=excluded.content_encoding,
+                availability_precision=excluded.availability_precision
             """,
             (
                 payload_id,
@@ -2710,6 +3286,7 @@ def record_source_payload(
                 request_body_sha256,
                 payload_sha256,
                 effective_date,
+                available_date,
                 published_at,
                 fetched_at or _now_iso(),
                 cache_file,
@@ -2720,10 +3297,35 @@ def record_source_payload(
                 storage_uri,
                 len(raw_bytes),
                 content_encoding,
+                str(availability_precision or "unknown"),
             ),
         )
         conn.commit()
     return payload_id
+
+
+def update_source_payload_validation(
+    db_path: Path,
+    *,
+    payload_id: str,
+    validation_status: str,
+    validation_error: str | None = None,
+) -> None:
+    """Finalize the validation state of an immutable payload envelope."""
+
+    db_path = _ready_market_data_db(Path(db_path))
+    with closing(_connect(db_path)) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE source_payloads
+            SET validation_status = ?, validation_error = ?
+            WHERE payload_id = ?
+            """,
+            (validation_status, validation_error, payload_id),
+        )
+        if cursor.rowcount != 1:
+            raise KeyError(f"unknown source payload: {payload_id}")
+        conn.commit()
 
 
 def upsert_index_bars(db_path: Path, rows: Iterable[dict[str, Any]]) -> int:
@@ -2735,9 +3337,9 @@ def upsert_index_bars(db_path: Path, rows: Iterable[dict[str, Any]]) -> int:
                 """
                 INSERT INTO index_bars(
                 index_code, trade_date, close, change_points, source_endpoint,
-                    source_url, source_payload_sha256, source_payload_id, fetched_at,
-                    published_at, data_status
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source_url, source_payload_sha256, source_payload_id, fetched_at,
+                    available_date, published_at, data_status, availability_precision, data_gap_reason
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(index_code, trade_date) DO UPDATE SET
                     close=excluded.close,
                     change_points=excluded.change_points,
@@ -2746,8 +3348,11 @@ def upsert_index_bars(db_path: Path, rows: Iterable[dict[str, Any]]) -> int:
                     source_payload_sha256=excluded.source_payload_sha256,
                     source_payload_id=excluded.source_payload_id,
                     fetched_at=excluded.fetched_at,
+                    available_date=excluded.available_date,
                     published_at=excluded.published_at,
-                    data_status=excluded.data_status
+                    data_status=excluded.data_status,
+                    availability_precision=excluded.availability_precision,
+                    data_gap_reason=excluded.data_gap_reason
                 """,
                 (
                     str(row["index_code"]),
@@ -2759,8 +3364,11 @@ def upsert_index_bars(db_path: Path, rows: Iterable[dict[str, Any]]) -> int:
                     str(row.get("source_payload_sha256") or ""),
                     row.get("source_payload_id"),
                     str(row.get("fetched_at") or _now_iso()),
+                    row.get("available_date"),
                     row.get("published_at"),
                     str(row.get("data_status") or "verified"),
+                    str(row.get("availability_precision") or "unknown"),
+                    row.get("data_gap_reason"),
                 ),
             )
             if row.get("source_payload_id"):
@@ -2817,6 +3425,10 @@ def upsert_security_master(
     source_payload_id: str | None = None,
     fetched_at: str | None = None,
     published_at: str | None = None,
+    available_date: date | str | None = None,
+    validation_status: str = "verified",
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
 ) -> None:
     db_path = _ready_market_data_db(Path(db_path))
     with closing(_connect(db_path)) as conn:
@@ -2825,15 +3437,18 @@ def upsert_security_master(
             INSERT INTO security_master_snapshots(
                 market, symbol, effective_date, name, industry, source_endpoint,
                 source_url, source_payload_sha256, source_payload_id, fetched_at,
-                published_at, validation_status
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified')
+                available_date, published_at, validation_status, availability_precision, data_gap_reason
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(market, symbol, effective_date) DO UPDATE SET
                 name=excluded.name, industry=excluded.industry,
                 source_endpoint=excluded.source_endpoint, source_url=excluded.source_url,
                 source_payload_sha256=excluded.source_payload_sha256,
                 source_payload_id=excluded.source_payload_id,
                 fetched_at=excluded.fetched_at, published_at=excluded.published_at,
-                validation_status=excluded.validation_status
+                available_date=excluded.available_date,
+                validation_status=excluded.validation_status,
+                availability_precision=excluded.availability_precision,
+                data_gap_reason=excluded.data_gap_reason
             """,
             (
                 market,
@@ -2846,7 +3461,11 @@ def upsert_security_master(
                 source_payload_sha256,
                 source_payload_id,
                 fetched_at or _now_iso(),
+                available_date.isoformat() if isinstance(available_date, date) else available_date,
                 published_at,
+                validation_status,
+                availability_precision or "unknown",
+                data_gap_reason,
             ),
         )
         conn.commit()
@@ -2875,7 +3494,11 @@ def upsert_monthly_revenue(
     fetched_at: str | None = None,
     published_at: str | None = None,
     available_date: date | str | None = None,
+    availability_precision: str = "unknown",
+    validation_status: str = "verified",
+    data_gap_reason: str | None = None,
 ) -> None:
+    revenue_month = _normalize_revenue_month(revenue_month)
     db_path = _ready_market_data_db(Path(db_path))
     with closing(_connect(db_path)) as conn:
         conn.execute(
@@ -2884,8 +3507,8 @@ def upsert_monthly_revenue(
                 market, symbol, revenue_month, monthly_revenue, revenue_mom,
                 revenue_yoy, source_endpoint, source_url, source_payload_sha256,
                 source_payload_id, fetched_at, published_at, available_date,
-                validation_status
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified')
+                validation_status, availability_precision, data_gap_reason
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(market, symbol, revenue_month) DO UPDATE SET
                 monthly_revenue=excluded.monthly_revenue, revenue_mom=excluded.revenue_mom,
                 revenue_yoy=excluded.revenue_yoy, source_endpoint=excluded.source_endpoint,
@@ -2893,7 +3516,9 @@ def upsert_monthly_revenue(
                 source_payload_id=excluded.source_payload_id,
                 fetched_at=excluded.fetched_at, published_at=excluded.published_at,
                 available_date=excluded.available_date,
-                validation_status=excluded.validation_status
+                validation_status=excluded.validation_status,
+                availability_precision=excluded.availability_precision,
+                data_gap_reason=excluded.data_gap_reason
             """,
             (
                 market,
@@ -2909,6 +3534,9 @@ def upsert_monthly_revenue(
                 fetched_at or _now_iso(),
                 published_at,
                 available_date.isoformat() if isinstance(available_date, date) else available_date,
+                validation_status,
+                availability_precision or "unknown",
+                data_gap_reason,
             ),
         )
         conn.commit()
@@ -2937,6 +3565,9 @@ def upsert_valuation_snapshot(
     fetched_at: str | None = None,
     published_at: str | None = None,
     available_date: date | str | None = None,
+    availability_precision: str = "unknown",
+    validation_status: str = "verified",
+    data_gap_reason: str | None = None,
 ) -> None:
     db_path = _ready_market_data_db(Path(db_path))
     with closing(_connect(db_path)) as conn:
@@ -2945,15 +3576,18 @@ def upsert_valuation_snapshot(
             INSERT INTO valuation_snapshots(
                 market, symbol, trade_date, pe, pb, dividend_yield,
                 source_endpoint, source_url, source_payload_sha256, source_payload_id,
-                fetched_at, published_at, available_date, validation_status
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified')
+                fetched_at, published_at, available_date, validation_status,
+                availability_precision, data_gap_reason
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(market, symbol, trade_date) DO UPDATE SET
                 pe=excluded.pe, pb=excluded.pb, dividend_yield=excluded.dividend_yield,
                 source_endpoint=excluded.source_endpoint, source_url=excluded.source_url,
                 source_payload_sha256=excluded.source_payload_sha256, fetched_at=excluded.fetched_at,
                 source_payload_id=excluded.source_payload_id,
                 published_at=excluded.published_at, available_date=excluded.available_date,
-                validation_status=excluded.validation_status
+                validation_status=excluded.validation_status,
+                availability_precision=excluded.availability_precision,
+                data_gap_reason=excluded.data_gap_reason
             """,
             (
                 market,
@@ -2969,6 +3603,9 @@ def upsert_valuation_snapshot(
                 fetched_at or _now_iso(),
                 published_at,
                 available_date.isoformat() if isinstance(available_date, date) else available_date,
+                validation_status,
+                availability_precision or "unknown",
+                data_gap_reason,
             ),
         )
         conn.commit()
@@ -3000,6 +3637,9 @@ def upsert_annual_company_fundamental(
     source_payload_sha256: str | None = None,
     source_payload_id: str | None = None,
     fetched_at: str | None = None,
+    validation_status: str = "verified",
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
     raw_payload_json: str | None = None,
 ) -> None:
     db_path = _ready_market_data_db(Path(db_path))
@@ -3010,8 +3650,9 @@ def upsert_annual_company_fundamental(
                 market, symbol, fiscal_year, available_date, published_at,
                 revenue, gross_profit, net_income, equity, eps, roe,
                 source_endpoint, source_url, source_payload_sha256, source_payload_id,
-                fetched_at, validation_status, raw_payload_json
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified', ?)
+                fetched_at, validation_status, availability_precision, data_gap_reason,
+                raw_payload_json
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(market, symbol, fiscal_year, available_date) DO UPDATE SET
                 published_at=excluded.published_at, revenue=excluded.revenue,
                 gross_profit=excluded.gross_profit, net_income=excluded.net_income,
@@ -3020,6 +3661,8 @@ def upsert_annual_company_fundamental(
                 source_payload_sha256=excluded.source_payload_sha256,
                 source_payload_id=excluded.source_payload_id,
                 fetched_at=excluded.fetched_at, validation_status=excluded.validation_status,
+                availability_precision=excluded.availability_precision,
+                data_gap_reason=excluded.data_gap_reason,
                 raw_payload_json=excluded.raw_payload_json
             """,
             (
@@ -3039,6 +3682,9 @@ def upsert_annual_company_fundamental(
                 source_payload_sha256,
                 source_payload_id,
                 fetched_at or _now_iso(),
+                validation_status,
+                availability_precision or "unknown",
+                data_gap_reason,
                 raw_payload_json,
             ),
         )
@@ -3064,6 +3710,10 @@ def upsert_universe_membership(
     source_payload_sha256: str | None = None,
     source_payload_id: str | None = None,
     effective_to: date | None = None,
+    available_date: date | str | None = None,
+    published_at: str | None = None,
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
 ) -> None:
     db_path = _ready_market_data_db(Path(db_path))
     with closing(_connect(db_path)) as conn:
@@ -3071,14 +3721,19 @@ def upsert_universe_membership(
             """
             INSERT INTO universe_membership(
                 theme, symbol, market, universe_mode, effective_from, effective_to,
-                source, source_payload_sha256, source_payload_id, recorded_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source, source_payload_sha256, source_payload_id, recorded_at,
+                available_date, published_at, availability_precision, data_gap_reason
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(theme, symbol, market, universe_mode, effective_from) DO UPDATE SET
                 effective_to=excluded.effective_to,
                 source=excluded.source,
                 source_payload_sha256=excluded.source_payload_sha256,
                 source_payload_id=excluded.source_payload_id,
-                recorded_at=excluded.recorded_at
+                recorded_at=excluded.recorded_at,
+                available_date=excluded.available_date,
+                published_at=excluded.published_at,
+                availability_precision=excluded.availability_precision,
+                data_gap_reason=excluded.data_gap_reason
             """,
             (
                 theme,
@@ -3091,6 +3746,10 @@ def upsert_universe_membership(
                 source_payload_sha256,
                 source_payload_id,
                 _now_iso(),
+                available_date.isoformat() if isinstance(available_date, date) else available_date,
+                published_at,
+                availability_precision or "unknown",
+                data_gap_reason,
             ),
         )
         conn.commit()
@@ -3374,6 +4033,9 @@ def upsert_dataset_sync_state(
 ) -> None:
     """Maintain a dataset-level incremental checkpoint independently of raw bars."""
 
+    if last_status not in VALID_SYNC_STATUSES:
+        raise ValueError(f"unsupported sync status: {last_status}")
+
     db_path = Path(db_path)
 
     def _date_text(value: date | str | None) -> str | None:
@@ -3413,6 +4075,290 @@ def upsert_dataset_sync_state(
         conn.commit()
 
 
+_PARTITION_STATUSES = {
+    "migrated",
+    "verified",
+    "partial",
+    "quarantined",
+    "failed",
+    "not_implemented",
+}
+
+
+def upsert_partition_state(
+    db_path: Path,
+    *,
+    dataset_key: str,
+    partition_key: str,
+    request_method: str,
+    request_url: str,
+    market: str | None = None,
+    symbol: str | None = None,
+    requested_from: date | str | None = None,
+    requested_to: date | str | None = None,
+    request_body_sha256: str | None = None,
+    payload_sha256: str | None = None,
+    source_payload_id: str | None = None,
+    first_effective_date: date | str | None = None,
+    last_effective_date: date | str | None = None,
+    row_count: int = 0,
+    status: str = "verified",
+    last_verified_at: str | None = None,
+    last_run_id: str | None = None,
+    last_completeness_run_id: str | None = None,
+    gap_reason: str | None = None,
+    retry_after: str | None = None,
+) -> None:
+    """Persist the verified state of one fetch partition.
+
+    A partition is the unit of idempotent network work.  The request range and
+    request-body hash are retained alongside the payload hash so a subsequent
+    run can decide that a fetch is already verified without re-querying the
+    source.
+    """
+
+    if status not in _PARTITION_STATUSES:
+        raise ValueError(f"unsupported partition status: {status}")
+    db_path = _ready_market_data_db(Path(db_path))
+    iso = lambda value: value.isoformat() if isinstance(value, date) else value
+    with closing(_connect(db_path)) as conn:
+        conn.execute(
+            """
+            INSERT INTO market_data_partition_state(
+                dataset_key, market, symbol, partition_key, requested_from,
+                requested_to, request_method, request_url, request_body_sha256,
+                payload_sha256, source_payload_id, first_effective_date,
+                last_effective_date, row_count, status, last_verified_at,
+                last_run_id, last_completeness_run_id, gap_reason, retry_after,
+                updated_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(dataset_key, market, symbol, partition_key) DO UPDATE SET
+                requested_from=excluded.requested_from,
+                requested_to=excluded.requested_to,
+                request_method=excluded.request_method,
+                request_url=excluded.request_url,
+                request_body_sha256=excluded.request_body_sha256,
+                payload_sha256=excluded.payload_sha256,
+                source_payload_id=excluded.source_payload_id,
+                first_effective_date=excluded.first_effective_date,
+                last_effective_date=excluded.last_effective_date,
+                row_count=excluded.row_count,
+                status=excluded.status,
+                last_verified_at=excluded.last_verified_at,
+                last_run_id=excluded.last_run_id,
+                last_completeness_run_id=excluded.last_completeness_run_id,
+                gap_reason=excluded.gap_reason,
+                retry_after=excluded.retry_after,
+                updated_at=excluded.updated_at
+            """,
+            (
+                str(dataset_key),
+                str(market or ""),
+                str(symbol or ""),
+                str(partition_key),
+                iso(requested_from),
+                iso(requested_to),
+                str(request_method or "GET").upper(),
+                str(request_url),
+                request_body_sha256,
+                payload_sha256,
+                source_payload_id,
+                iso(first_effective_date),
+                iso(last_effective_date),
+                max(int(row_count), 0),
+                status,
+                last_verified_at,
+                last_run_id,
+                last_completeness_run_id,
+                gap_reason,
+                retry_after,
+                _now_iso(),
+            ),
+        )
+        conn.commit()
+
+
+def get_partition_state(
+    db_path: Path,
+    *,
+    dataset_key: str,
+    partition_key: str,
+    market: str | None = None,
+    symbol: str | None = None,
+) -> dict[str, Any] | None:
+    """Read one partition checkpoint without initializing or mutating SQLite."""
+
+    with closing(_read_only_connect(Path(db_path))) as conn:
+        row = conn.execute(
+            """
+            SELECT * FROM market_data_partition_state
+            WHERE dataset_key = ? AND market = ? AND symbol = ? AND partition_key = ?
+            """,
+            (dataset_key, str(market or ""), str(symbol or ""), partition_key),
+        ).fetchone()
+    return dict(row) if row is not None else None
+
+
+def partition_is_verified(
+    db_path: Path,
+    *,
+    dataset_key: str,
+    partition_key: str,
+    requested_from: date | str | None = None,
+    requested_to: date | str | None = None,
+    request_body_sha256: str | None = None,
+    market: str | None = None,
+    symbol: str | None = None,
+) -> bool:
+    """Return whether an exact request partition is already verified."""
+
+    state = get_partition_state(
+        db_path,
+        dataset_key=dataset_key,
+        market=market,
+        symbol=symbol,
+        partition_key=partition_key,
+    )
+    if not state or state.get("status") != "verified":
+        return False
+    if not state.get("last_verified_at") or not state.get("payload_sha256"):
+        return False
+    iso = lambda value: value.isoformat() if isinstance(value, date) else value
+    return (
+        state.get("requested_from") == iso(requested_from)
+        and state.get("requested_to") == iso(requested_to)
+        and state.get("request_body_sha256") == request_body_sha256
+    )
+
+
+def record_data_gap(
+    db_path: Path,
+    *,
+    dataset_key: str,
+    partition_key: str,
+    reason: str,
+    detail: str,
+    market: str | None = None,
+    symbol: str | None = None,
+    run_id: str | None = None,
+    retry_after: str | None = None,
+    status: str = "open",
+    observed_at: str | None = None,
+) -> None:
+    """Upsert one explainable gap without duplicating repeated observations."""
+
+    if not str(reason).strip():
+        raise ValueError("data gap reason cannot be empty")
+    observed = observed_at or _now_iso()
+    db_path = _ready_market_data_db(Path(db_path))
+    with closing(_connect(db_path)) as conn:
+        conn.execute(
+            """
+            INSERT INTO market_data_gap_ledger(
+                dataset_key, market, symbol, partition_key, reason, detail,
+                first_seen_at, last_seen_at, occurrence_count, latest_run_id,
+                retry_after, status
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+            ON CONFLICT(dataset_key, market, symbol, partition_key) DO UPDATE SET
+                reason=excluded.reason,
+                detail=excluded.detail,
+                last_seen_at=excluded.last_seen_at,
+                occurrence_count=market_data_gap_ledger.occurrence_count + 1,
+                latest_run_id=excluded.latest_run_id,
+                retry_after=excluded.retry_after,
+                status=excluded.status
+            """,
+            (
+                dataset_key,
+                str(market or ""),
+                str(symbol or ""),
+                partition_key,
+                reason,
+                detail,
+                observed,
+                observed,
+                run_id,
+                retry_after,
+                status,
+            ),
+        )
+        conn.commit()
+
+
+def begin_completeness_run(
+    db_path: Path,
+    *,
+    dataset_key: str,
+    run_id: str | None = None,
+    expected_rows: int | None = None,
+    expected_partitions: int | None = None,
+    started_at: str | None = None,
+    completeness_run_id: str | None = None,
+) -> str:
+    """Start a completeness measurement linked to a sync run when available."""
+
+    db_path = _ready_market_data_db(Path(db_path))
+    identifier = completeness_run_id or f"completeness-{uuid.uuid4().hex}"
+    with closing(_connect(db_path)) as conn:
+        conn.execute(
+            """
+            INSERT INTO market_data_completeness_runs(
+                completeness_run_id, run_id, dataset_key, started_at, status,
+                expected_rows, expected_partitions
+            ) VALUES(?, ?, ?, ?, 'running', ?, ?)
+            """,
+            (
+                identifier,
+                run_id,
+                dataset_key,
+                started_at or _now_iso(),
+                expected_rows,
+                expected_partitions,
+            ),
+        )
+        conn.commit()
+    return identifier
+
+
+def finish_completeness_run(
+    db_path: Path,
+    *,
+    completeness_run_id: str,
+    status: str,
+    actual_rows: int | None = None,
+    actual_partitions: int | None = None,
+    missing_partitions: Iterable[str] = (),
+    summary: dict[str, Any] | None = None,
+    finished_at: str | None = None,
+) -> None:
+    """Close a completeness run with explicit missing partition evidence."""
+
+    if status not in _PARTITION_STATUSES | {"running"}:
+        raise ValueError(f"unsupported completeness status: {status}")
+    db_path = _ready_market_data_db(Path(db_path))
+    with closing(_connect(db_path)) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE market_data_completeness_runs
+            SET finished_at = ?, status = ?, actual_rows = ?, actual_partitions = ?,
+                missing_partitions_json = ?, summary_json = ?
+            WHERE completeness_run_id = ?
+            """,
+            (
+                finished_at or _now_iso(),
+                status,
+                actual_rows,
+                actual_partitions,
+                json.dumps(sorted({str(item) for item in missing_partitions}), ensure_ascii=False),
+                json.dumps(summary or {}, ensure_ascii=False, default=str),
+                completeness_run_id,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise KeyError(f"unknown completeness run: {completeness_run_id}")
+        conn.commit()
+
+
 def upsert_corporate_action(
     db_path: Path,
     *,
@@ -3431,9 +4377,22 @@ def upsert_corporate_action(
     cash_amount: float | None = None,
     fetched_at: str | None = None,
     published_at: str | None = None,
+    available_date: date | str | None = None,
+    validation_status: str = "verified",
+    availability_precision: str = "unknown",
+    data_gap_reason: str | None = None,
     raw_payload_json: str | None = None,
 ) -> str:
     db_path = _ready_market_data_db(Path(db_path))
+    if isinstance(raw_payload_json, (dict, list)):
+        raw_payload_text = json.dumps(
+            raw_payload_json,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
+    else:
+        raw_payload_text = raw_payload_json
     action_id = hashlib.sha256(
         "|".join(
             [
@@ -3441,7 +4400,6 @@ def upsert_corporate_action(
                 symbol,
                 action_date.isoformat(),
                 action_type,
-                str(source_payload_sha256 or ""),
             ]
         ).encode("utf-8")
     ).hexdigest()
@@ -3452,16 +4410,21 @@ def upsert_corporate_action(
                 action_id, market, symbol, action_date, action_type, ex_date,
                 record_date, payment_date, ratio, cash_amount, source_endpoint,
                 source_url, source_payload_sha256, source_payload_id, fetched_at,
-                published_at, validation_status, raw_payload_json
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified', ?)
+                available_date, published_at, validation_status, availability_precision, data_gap_reason,
+                raw_payload_json
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(action_id) DO UPDATE SET
                 ex_date=excluded.ex_date, record_date=excluded.record_date,
                 payment_date=excluded.payment_date, ratio=excluded.ratio,
                 cash_amount=excluded.cash_amount, source_endpoint=excluded.source_endpoint,
                 source_url=excluded.source_url, source_payload_sha256=excluded.source_payload_sha256,
                 source_payload_id=excluded.source_payload_id,
-                fetched_at=excluded.fetched_at, published_at=excluded.published_at,
-                validation_status=excluded.validation_status, raw_payload_json=excluded.raw_payload_json
+                fetched_at=excluded.fetched_at, available_date=excluded.available_date,
+                published_at=excluded.published_at,
+                validation_status=excluded.validation_status,
+                availability_precision=excluded.availability_precision,
+                data_gap_reason=excluded.data_gap_reason,
+                raw_payload_json=excluded.raw_payload_json
             """,
             (
                 action_id,
@@ -3479,8 +4442,12 @@ def upsert_corporate_action(
                 source_payload_sha256,
                 source_payload_id,
                 fetched_at or _now_iso(),
+                available_date.isoformat() if isinstance(available_date, date) else available_date,
                 published_at,
-                raw_payload_json,
+                validation_status,
+                availability_precision or "unknown",
+                data_gap_reason,
+                raw_payload_text,
             ),
         )
         conn.commit()
@@ -3516,6 +4483,9 @@ def database_integrity(db_path: Path) -> dict[str, Any]:
             "market_data_fetch_attempts",
             "market_data_sync_items",
             "market_data_sync_state",
+            "market_data_partition_state",
+            "market_data_gap_ledger",
+            "market_data_completeness_runs",
             "market_data_quality_issues",
             "market_data_quality_issue_occurrences",
             "financial_fact_observations",
@@ -3547,10 +4517,46 @@ def database_integrity(db_path: Path) -> dict[str, Any]:
             ).fetchall()
             if not Path(str(row[0])).exists()
         ]
+        payload_hash_mismatches: list[str] = []
+        for row in conn.execute(
+            "SELECT payload_id, storage_mode, storage_uri, payload_sha256, raw_payload_json "
+            "FROM source_payloads"
+        ).fetchall():
+            payload_id = str(row["payload_id"])
+            if str(row["storage_mode"] or "inline") == "external":
+                storage_uri = str(row["storage_uri"] or "")
+                if not storage_uri or not Path(storage_uri).exists():
+                    continue
+                actual_hash = hashlib.sha256(Path(storage_uri).read_bytes()).hexdigest()
+            else:
+                actual_hash = hashlib.sha256(
+                    str(row["raw_payload_json"] or "").encode("utf-8")
+                ).hexdigest()
+            if actual_hash != str(row["payload_sha256"] or ""):
+                payload_hash_mismatches.append(payload_id)
+        source_link_orphans = [
+            str(row["record_identity"])
+            for row in conn.execute(
+                """
+                SELECT link.record_identity
+                FROM market_data_source_links AS link
+                LEFT JOIN source_payloads AS payload
+                  ON payload.payload_id = link.payload_id
+                WHERE payload.payload_id IS NULL
+                """
+            ).fetchall()
+        ]
         meta_rows = conn.execute(
             "SELECT key, value FROM schema_meta WHERE key LIKE '%schema_version' OR key LIKE '%migration%'"
         ).fetchall()
-    ok = bool(daily.get("ok")) and sqlite_integrity == "ok" and not foreign_key_violations and not external_payload_missing
+    ok = (
+        bool(daily.get("ok"))
+        and sqlite_integrity == "ok"
+        and not foreign_key_violations
+        and not external_payload_missing
+        and not payload_hash_mismatches
+        and not source_link_orphans
+    )
     return {
         "database_path": str(db_path),
         "ok": ok,
@@ -3561,5 +4567,19 @@ def database_integrity(db_path: Path) -> dict[str, Any]:
         "sqlite_integrity": sqlite_integrity,
         "foreign_key_violations": foreign_key_violations,
         "external_payload_missing": external_payload_missing,
+        "payload_hash_mismatches": payload_hash_mismatches,
+        "source_link_orphans": source_link_orphans,
+        "source_payload_integrity": {
+            "status": (
+                "verified"
+                if not external_payload_missing
+                and not payload_hash_mismatches
+                and not source_link_orphans
+                else "failed"
+            ),
+            "external_payload_missing": external_payload_missing,
+            "hash_mismatches": payload_hash_mismatches,
+            "source_link_orphans": source_link_orphans,
+        },
         "schema_meta": {str(row["key"]): str(row["value"]) for row in meta_rows},
     }

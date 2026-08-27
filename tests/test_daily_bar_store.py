@@ -40,6 +40,7 @@ class DailyBarStoreTests(unittest.TestCase):
                 source_payload_sha256="primary-hash",
                 source_fetched_at="2026-01-03T00:00:00+08:00",
                 source_priority=10,
+                availability_precision="source_observation_date",
             )
             fallback = VerifiedDailyBar(
                 **{
@@ -57,6 +58,8 @@ class DailyBarStoreTests(unittest.TestCase):
             self.assertEqual(stats.updated_rows, 1)
             self.assertEqual(stats.duplicate_rows, 0)
             self.assertEqual(rows[0]["source_endpoint"], "twse.stock_day.primary")
+            self.assertEqual(rows[0]["availability_precision"], "source_observation_date")
+            self.assertIsNone(rows[0]["data_gap_reason"])
             self.assertEqual(database_integrity(db_path)["ok"], True)
 
     def test_cache_collector_maps_hash_and_rejects_invalid_rows(self) -> None:

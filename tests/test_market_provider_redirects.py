@@ -173,6 +173,10 @@ class MarketProviderRedirectTests(unittest.TestCase):
         self.assertEqual(row[1], request.full_url)
         self.assertTrue(row[2])
         self.assertEqual(row[3], "network")
+        self.assertEqual(
+            provider.get_market_data_store_diagnostics()["source_payload_integrity"]["hash_mismatches"],
+            [],
+        )
 
 
 if __name__ == "__main__":
